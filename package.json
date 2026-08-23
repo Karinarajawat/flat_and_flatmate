@@ -1,0 +1,38 @@
+{
+  "name": "etl",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "scrape:reddit": "tsx src/jobs/scrape-reddit.ts",
+    "count-valid-norm": "tsx src/jobs/count-valid-norm.ts",
+    "parse": "tsx src/jobs/parse-posts.ts",
+    "export": "tsx src/jobs/export-listings.ts",
+    "pipeline": "tsx src/jobs/pipeline.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Karinarajawat/flat_and_flatmate.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Karinarajawat/flat_and_flatmate/issues"
+  },
+  "homepage": "https://github.com/Karinarajawat/flat_and_flatmate#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mongoose": "^9.9.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12"
+  }
+}
