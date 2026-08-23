@@ -1,4 +1,6 @@
 import { config as scrapingConfig } from "@/config/scrapping";
+import { createFacebookBrowser } from "@/facebook/browser";
+import { scrapeGroup } from "@/facebook/scraper";
 import { parsePost } from "@/parsing/parser";
 import { RedditClient } from "@/reddit/client";
 import { scrapeSubreddit } from "@/reddit/scraper";
@@ -22,6 +24,26 @@ const main = async () => {
   //
   //    Scraping Facebook
   //
+  const { browser, context } = await createFacebookBrowser();
+  try {
+    for (const groupId of scrapingConfig.facebook.groups) {
+      const result = await scrapeGroup(context, groupId);
+
+      const filename = `facebook-${groupId}-${jobTimestamp}`;
+
+      const normOutputPath = await writeNormData(filename, result);
+
+      normPostMap[groupId] = result;
+
+      console.log(
+        `Fetched ${result.length} posts for fb-${groupId}. Results saved at Norm: ${normOutputPath}\n`,
+      );
+    }
+
+    console.log("\nFacebook scraping complete.");
+  } finally {
+    await browser.close();
+  }
 
   //
   //    Scraping Reddit

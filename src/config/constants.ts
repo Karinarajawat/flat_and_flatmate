@@ -1,8 +1,8 @@
 export const REDDIT_USER_AGENT =
   "node:flat-sharing-etl:v1.0.0 (by /u/_aquiem_)";
 
-export const REDDIT_DEFAULT_FETCH_LIMIT = 100;
-export const REDDIT_DEFAULT_MAX_POSTS = 100;
+export const REDDIT_DEFAULT_FETCH_LIMIT = 200;
+export const REDDIT_DEFAULT_MAX_POSTS = 200;
 export const REDDIT_REQUEST_DELAY_MS = 3_000;
 
 export const REDDIT_RATE_LIMIT_THRESHOLD = 10;
@@ -13,16 +13,16 @@ export const REDDIT_RETRY_DELAY_MS = 5_000;
 
 export const REDDIT_API_HOST = "www.reddit.com";
 
-export const TARGET_SUBREDDITS = ["flatmatesmumbai", "mumbai_flat_flatmates"];
+// export const TARGET_SUBREDDITS = ["flatmatesmumbai", "mumbai_flat_flatmates"];
 
-// export const TARGET_SUBREDDITS = [
-//   "flatmatesmumbai",
-//   "mumbai_flat_flatmates",
-//   "PuneFlat_Flatmates",
-//   "PuneClassifieds",
-// ];
+export const TARGET_SUBREDDITS = [
+  "flatmatesmumbai",
+  "mumbai_flat_flatmates",
+  "PuneFlat_Flatmates",
+  "PuneClassifieds",
+];
 
-export const FACEBOOK_DEFAULT_PAGES_TO_SCROLL = 50;
+export const FACEBOOK_DEFAULT_PAGES_TO_SCROLL = 5;
 
 export const FACEBOOK_SCROLL_DELAY_MS = 4000;
 export const FACEBOOK_SEE_MORE_DELAY_MS = 1000;

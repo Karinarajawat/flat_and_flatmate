@@ -9,6 +9,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "scrape:reddit": "tsx src/jobs/scrape-reddit.ts",
+    "scrape:facebook": "tsx src/jobs/scrape-facebook.ts",
     "count-valid-norm": "tsx src/jobs/count-valid-norm.ts",
     "parse": "tsx src/jobs/parse-posts.ts",
     "export": "tsx src/jobs/export-listings.ts",
@@ -29,6 +30,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "mongoose": "^9.9.3",
+    "playwright": "^1.62.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
