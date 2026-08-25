@@ -24,7 +24,7 @@ export const extractFacebookPosts = async (
 
       postText = postText
         .replace(
-          /\s*(See more|See More|See less|See Less|आणखी पहा|और देखें|कमी दाखवा|कम दिखाएं)$/gi,
+          /\s*(?:…|\.\.\.)?\s*(See more|See More|See less|See Less|आणखी पहा|और देखें|कमी दाखवा|कम दिखाएं)$/gi,
           "",
         )
         .trim();
@@ -39,25 +39,16 @@ export const extractFacebookPosts = async (
 
       let postContainer: HTMLElement | null = messageEl.parentElement;
 
-      for (let depth = 0; depth < 15; depth++) {
-        if (!postContainer) {
+      for (let depth = 0; depth < 20; depth++) {
+        if (!postContainer || !postContainer.parentElement) {
           break;
         }
 
-        const hasAuthor = postContainer.querySelector(
-          'a[href*="/user/"], ' +
-            'a[href*="/groups/"], ' +
-            'a[role="link"] strong, ' +
-            "h2, h3",
-        );
-
-        const hasPostLink = postContainer.querySelector(
-          'a[href*="/posts/"], ' +
-            'a[href*="/permalink/"], ' +
-            'a[href*="/multi_permalink/"]',
-        );
-
-        if (hasAuthor && hasPostLink) {
+        if (
+          postContainer.getAttribute("role") === "article" ||
+          postContainer.parentElement.getAttribute("role") === "feed" ||
+          postContainer.classList.contains("x1yztbdb")
+        ) {
           break;
         }
 
@@ -76,38 +67,68 @@ export const extractFacebookPosts = async (
       // Post URL + ID
       // ----------------------------------------------------------
 
-      let postUrl = "";
-      let postId = "fb_" + Math.random().toString(36).slice(2, 11);
-
-      const postLink = postContainer.querySelector<HTMLAnchorElement>(
-        'a[href*="/posts/"], ' +
-          'a[href*="/permalink/"], ' +
-          'a[href*="/multi_permalink/"], ' +
-          'a[href*="?__cft__"]',
-      );
-
-      if (postLink) {
-        postUrl = postLink.href;
-
-        const match = postUrl.match(
-          /\/(posts|permalink|multi_permalink)\/(\d+)/,
+      let postIdFound: string | null = null;
+      const anchors = Array.from(postContainer.querySelectorAll<HTMLAnchorElement>("a"));
+      const validHrefs = anchors
+        .map((a) => a.href)
+        .filter(
+          (href) =>
+            Boolean(href) &&
+            !href.includes("/emoji.php") &&
+            !href.includes("/rsrc.php") &&
+            !href.includes("/user/") &&
+            !href.includes("profile.php") &&
+            !href.includes("/profile/"),
         );
 
-        if (match?.[2]) {
-          postId = match[2];
+      for (const href of validHrefs) {
+        const postMatch = href.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
+        if (postMatch?.[1]) {
+          postIdFound = postMatch[1];
+          break;
+        }
+        const setMatch = href.match(/set=(?:pcb|gm|a)\.(\d+)/);
+        if (setMatch?.[1]) {
+          postIdFound = setMatch[1];
+          break;
+        }
+        const storyMatch = href.match(/(?:story_fbid|fbid)=(\d+)/);
+        if (storyMatch?.[1]) {
+          postIdFound = storyMatch[1];
+          break;
+        }
+      }
+
+      if (!postIdFound) {
+        const html = postContainer.outerHTML || "";
+        const postMatch = html.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
+        if (postMatch?.[1]) {
+          postIdFound = postMatch[1];
         } else {
-          const photoLink =
-            postContainer.querySelector<HTMLAnchorElement>('a[href*="set="]');
-
-          if (photoLink) {
-            const setMatch = photoLink.href.match(/set=(pcb|gm)\.(\d+)/);
-
-            if (setMatch?.[2]) {
-              postId = setMatch[2];
+          const setMatch = html.match(/set=(?:pcb|gm|a)\.(\d+)/);
+          if (setMatch?.[1]) {
+            postIdFound = setMatch[1];
+          } else {
+            const storyMatch = html.match(/(?:story_fbid|fbid)=(\d+)/);
+            if (storyMatch?.[1]) {
+              postIdFound = storyMatch[1];
             }
           }
         }
       }
+
+      let hash = 0;
+      const textToHash = postText.slice(0, 100);
+      for (let i = 0; i < textToHash.length; i++) {
+        hash = (hash << 5) - hash + textToHash.charCodeAt(i);
+        hash |= 0;
+      }
+      const fallbackId = "fb_" + Math.abs(hash).toString(36);
+
+      const postId = postIdFound || fallbackId;
+      const postUrl = postIdFound
+        ? `https://www.facebook.com/groups/${groupId}/posts/${postIdFound}`
+        : "";
 
       seenTexts.add(postText);
 
@@ -139,7 +160,7 @@ export const extractFacebookPosts = async (
         author = nameLink.innerText.trim().split("\n")[0];
       } else {
         const fallbackHeaderLink =
-          postContainer.querySelector<HTMLAnchorElement>("h2 a, h3 a");
+          postContainer.querySelector<HTMLAnchorElement>("h2 a, h3 a, h4 a");
 
         if (fallbackHeaderLink && fallbackHeaderLink.innerText) {
           author = fallbackHeaderLink.innerText.trim().split("\n")[0];
@@ -220,7 +241,7 @@ export const extractFacebookPosts = async (
 
         postText = postText
           .replace(
-            /\s*(See more|See More|See less|See Less|आणखी पहा|और देखें|कमी दाखवा|कम दिखाएं)$/gi,
+            /\s*(?:…|\.\.\.)?\s*(See more|See More|See less|See Less|आणखी पहा|और देखें|कमी दाखवा|कम दिखाएं)$/gi,
             "",
           )
           .trim();
@@ -243,44 +264,75 @@ export const extractFacebookPosts = async (
         );
 
         if (authorEl) {
-          author = authorEl.innerText.trim();
+          author = authorEl.innerText.trim().split("\n")[0];
         }
 
         // ----------------------------------------------------------
         // URL + ID
         // ----------------------------------------------------------
 
-        let postUrl = "";
-        let postId = "fb_" + Math.random().toString(36).slice(2, 11);
-
-        const linkEl = node.querySelector<HTMLAnchorElement>(
-          'a[href*="/posts/"], ' +
-            'a[href*="/permalink/"], ' +
-            'a[href*="/multi_permalink/"]',
-        );
-
-        if (linkEl) {
-          postUrl = linkEl.href;
-
-          const match = postUrl.match(
-            /\/(posts|permalink|multi_permalink)\/(\d+)/,
+        let postIdFound: string | null = null;
+        const anchors = Array.from(node.querySelectorAll<HTMLAnchorElement>("a"));
+        const validHrefs = anchors
+          .map((a) => a.href)
+          .filter(
+            (href) =>
+              Boolean(href) &&
+              !href.includes("/emoji.php") &&
+              !href.includes("/rsrc.php") &&
+              !href.includes("/user/") &&
+              !href.includes("profile.php") &&
+              !href.includes("/profile/"),
           );
 
-          if (match?.[2]) {
-            postId = match[2];
+        for (const href of validHrefs) {
+          const postMatch = href.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
+          if (postMatch?.[1]) {
+            postIdFound = postMatch[1];
+            break;
+          }
+          const setMatch = href.match(/set=(?:pcb|gm|a)\.(\d+)/);
+          if (setMatch?.[1]) {
+            postIdFound = setMatch[1];
+            break;
+          }
+          const storyMatch = href.match(/(?:story_fbid|fbid)=(\d+)/);
+          if (storyMatch?.[1]) {
+            postIdFound = storyMatch[1];
+            break;
+          }
+        }
+
+        if (!postIdFound) {
+          const html = node.outerHTML || "";
+          const postMatch = html.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
+          if (postMatch?.[1]) {
+            postIdFound = postMatch[1];
           } else {
-            const photoLink =
-              node.querySelector<HTMLAnchorElement>('a[href*="set="]');
-
-            if (photoLink) {
-              const setMatch = photoLink.href.match(/set=(pcb|gm)\.(\d+)/);
-
-              if (setMatch?.[2]) {
-                postId = setMatch[2];
+            const setMatch = html.match(/set=(?:pcb|gm|a)\.(\d+)/);
+            if (setMatch?.[1]) {
+              postIdFound = setMatch[1];
+            } else {
+              const storyMatch = html.match(/(?:story_fbid|fbid)=(\d+)/);
+              if (storyMatch?.[1]) {
+                postIdFound = storyMatch[1];
               }
             }
           }
         }
+
+        let hash = 0;
+        const textToHash = postText.slice(0, 100);
+        for (let i = 0; i < textToHash.length; i++) {
+          hash = (hash << 5) - hash + textToHash.charCodeAt(i);
+          hash |= 0;
+        }
+        const fallbackId = "fb_" + Math.abs(hash).toString(36);
+
+        const postId = postIdFound || fallbackId;
+        const postUrl = postIdFound
+          ? `https://www.facebook.com/groups/${groupId}/posts/${postIdFound}`
+          : "";
 
         // ----------------------------------------------------------
         // Images

@@ -8,6 +8,7 @@ import { config } from "@/config/scrapping";
 import {
   createFacebookBrowser,
   expandSeeMore,
+  hydrateFacebookPostLinks,
   navigateToFacebookGroup,
   scrollFacebookPage,
 } from "./browser";
@@ -57,6 +58,12 @@ export const scrapeGroup = async (
       // ----------------------------------------------------------
 
       await expandSeeMore(page);
+
+      // ----------------------------------------------------------
+      // Hydrate post links
+      // ----------------------------------------------------------
+
+      await hydrateFacebookPostLinks(page);
 
       // ----------------------------------------------------------
       // Extract currently visible posts

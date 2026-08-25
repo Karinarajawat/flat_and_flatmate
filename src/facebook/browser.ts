@@ -136,40 +136,64 @@ export const scrollFacebookPage = async (page: Page): Promise<void> => {
 
 export const expandSeeMore = async (page: Page): Promise<void> => {
   try {
-    const selectors = [
-      'div:text("See more")',
-      'div:text("See More")',
-      'div:text("आणखी पहा")',
-      'div:text("और देखें")',
-      'span:text("See more")',
-      'span:text("See More")',
-      'span:text("आणखी पहा")',
-      'span:text("और देखें")',
-    ].join(", ");
+    // 1. Expand via fast in-page DOM clicks across all matching role="button" and text nodes
+    await page.evaluate(() => {
+      const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'div[role="button"], span[role="button"], div[dir="auto"], span[dir="auto"]',
+        ),
+      );
 
-    const locators = page.locator(selectors);
-
-    const count = await locators.count();
-
-    for (let i = 0; i < count; i++) {
-      try {
-        const locator = locators.nth(i);
-
-        await locator.scrollIntoViewIfNeeded({
-          timeout: 1_500,
-        });
-
-        await locator.click({
-          force: true,
-          timeout: 2_000,
-        });
-      } catch {
-        // Ignore individual failures.
+      for (const el of candidates) {
+        const text = el.textContent?.trim() || "";
+        if (
+          /^(See more|See More|और देखें|आणखी पहा|Ver más|Mais)$/i.test(text) ||
+          /(?:…|\.\.\.)\s*(?:See more|See More|और देखें|आणखी पहा)$/i.test(text)
+        ) {
+          try {
+            el.click();
+          } catch {
+            // Ignore individual click errors
+          }
+        }
       }
-    }
+    });
 
-    if (count > 0) {
-      await page.waitForTimeout(1_000);
+    await page.waitForTimeout(1_000);
+  } catch {
+    // Non-fatal.
+  }
+};
+
+export const hydrateFacebookPostLinks = async (page: Page): Promise<void> => {
+  try {
+    // Find all post timestamp anchors in viewport and hover them to trigger dynamic URL hydration
+    const boxes = await page.evaluate(() => {
+      const anchors = Array.from(
+        document.querySelectorAll<HTMLAnchorElement>(
+          'a[href*="__tn__=%2CO%2CP-R"], a[href*="__tn__=%2CmH-R"], a[href*="__tn__=-R"]',
+        ),
+      );
+
+      return anchors.map((a) => {
+        const rect = a.getBoundingClientRect();
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          visible:
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.top >= -150 &&
+            rect.bottom <= window.innerHeight + 150,
+        };
+      });
+    });
+
+    for (const box of boxes) {
+      if (box.visible) {
+        await page.mouse.move(box.x, box.y);
+        await page.waitForTimeout(60);
+      }
     }
   } catch {
     // Non-fatal.
