@@ -20,6 +20,7 @@ import {
   NEIGHBORHOOD_TYPES,
   OCCUPANCY_TYPES,
 } from "@/config/model";
+import { Types } from "mongoose";
 import { z } from "zod";
 
 export type Location = {
@@ -61,7 +62,7 @@ export type ExternalListing = {
   lister: ExternalLister;
 };
 
-export type ListingDataFromGemeni = {
+export type ListingDataFromGemini = {
   title: string;
 
   carpet_area?: number;
@@ -87,7 +88,7 @@ export type ListingDataFromGemeni = {
   house_rules: HouseRule[];
   neighborhood: Neighborhood[];
 
-  rent: number;
+  rent?: number;
 
   deposit?: number;
   brokerage?: number;
@@ -98,13 +99,15 @@ export type ListingDataFromGemeni = {
   available_immediately: boolean;
 };
 
+export type ListingDataFromGemeni = ListingDataFromGemini;
+
 export type GeminiListingResponse =
   | {
       skip: true;
     }
   | {
       skip: false;
-      data: ListingDataFromGemeni;
+      data: ListingDataFromGemini;
       lister: {
         name: string;
         age?: number;
@@ -114,7 +117,9 @@ export type GeminiListingResponse =
       };
     };
 
-export type ListingData = ListingDataFromGemeni & {
+export type ListingData = Omit<ListingDataFromGemini, "locality"> & {
+  locality?: string;
+  locality_id?: Types.ObjectId | string;
   location: Location;
 
   images: string[];
@@ -299,7 +304,6 @@ export const GeminiListingResponseSchema = {
         "amenities",
         "house_rules",
         "neighborhood",
-        "rent",
         "available_immediately",
       ],
     },
@@ -399,7 +403,7 @@ export const GeminiListingResponseZodSchema = z.discriminatedUnion("skip", [
         }),
       ),
 
-      rent: z.number(),
+      rent: z.number().optional(),
 
       deposit: z.number().optional(),
 

@@ -2,7 +2,13 @@ import fs from "fs/promises";
 import path from "path";
 
 import { parsePost } from "@/parsing/parser";
-import { writeFinalData, writeOfferingData } from "@/storage/storage";
+import {
+  writeAmbiguousData,
+  writeFinalData,
+  writeNotHousingData,
+  writeNotOfferingData,
+  writeOfferingData,
+} from "@/storage/storage";
 import { Listing } from "@/types/listing";
 import { RawPost } from "@/types/post";
 
@@ -41,11 +47,17 @@ const main = async () => {
       }
 
       const offeringPosts: RawPost[] = [];
+      const notOfferingPosts: RawPost[] = [];
+      const ambiguousPosts: RawPost[] = [];
+      const notHousingPosts: RawPost[] = [];
       const finalListings: Listing[] = [];
 
       const stats = {
         total: 0,
-        heuristic_valid: 0,
+        offering: 0,
+        not_offering: 0,
+        ambiguous: 0,
+        not_housing: 0,
         llm_skipped: 0,
         success: 0,
         failed: 0,
@@ -56,9 +68,23 @@ const main = async () => {
 
         const result = await parsePost(post);
 
-        if (result.listingType === "offering_room") {
-          stats.heuristic_valid++;
-          offeringPosts.push(post);
+        switch (result.listingType) {
+          case "offering_room":
+            stats.offering++;
+            offeringPosts.push(post);
+            break;
+          case "seeking_room":
+            stats.not_offering++;
+            notOfferingPosts.push(post);
+            break;
+          case "ambiguous":
+            stats.ambiguous++;
+            ambiguousPosts.push(post);
+            break;
+          case "not_housing":
+            stats.not_housing++;
+            notHousingPosts.push(post);
+            break;
         }
 
         if (result.status === "success" && result.listing) {
@@ -88,20 +114,37 @@ const main = async () => {
         outputName,
         offeringPosts,
       );
-
+      const notOfferingOutputPath = await writeNotOfferingData(
+        outputName,
+        notOfferingPosts,
+      );
+      const ambiguousOutputPath = await writeAmbiguousData(
+        outputName,
+        ambiguousPosts,
+      );
+      const notHousingOutputPath = await writeNotHousingData(
+        outputName,
+        notHousingPosts,
+      );
       const finalOutputPath = await writeFinalData(outputName, finalListings);
 
       console.log(
         `\n${inputFilename} complete:` +
           `\n  Total: ${stats.total}` +
-          `\n  Heuristic valid: ${stats.heuristic_valid}` +
+          `\n  Offering: ${stats.offering}` +
+          `\n  Not offering: ${stats.not_offering}` +
+          `\n  Ambiguous: ${stats.ambiguous}` +
+          `\n  Not housing: ${stats.not_housing}` +
           `\n  LLM skipped: ${stats.llm_skipped}` +
-          `\n  Success: ${stats.success}` +
-          `\n  Failed: ${stats.failed}`,
+          `\n  LLM Success: ${stats.success}` +
+          `\n  LLM Failed: ${stats.failed}`,
       );
 
-      console.log(`Offering: ${offeringOutputPath}`);
-      console.log(`Final: ${finalOutputPath}\n`);
+      console.log(`Offering:     ${offeringOutputPath}`);
+      console.log(`Not offering: ${notOfferingOutputPath}`);
+      console.log(`Ambiguous:    ${ambiguousOutputPath}`);
+      console.log(`Not housing:  ${notHousingOutputPath}`);
+      console.log(`Final:        ${finalOutputPath}\n`);
     } catch (error) {
       console.error(
         `Failed to parse ${inputFile}:`,

@@ -6,7 +6,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function geocode(query: string) {
+export async function geocode(query: string) {
   if (!query.trim()) {
     return null;
   }

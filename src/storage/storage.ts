@@ -49,6 +49,61 @@ export const writeOfferingData = async <T>(
   );
 };
 
+export const writeNotOfferingData = async <T>(
+  filename: string,
+  data: T,
+): Promise<string> => {
+  return writeJson(
+    parsingConfig.storage.notOfferingDataDir,
+    `${filename}.json`,
+    data,
+  );
+};
+
+export const writeSeekingData = async <T>(
+  filename: string,
+  data: T,
+): Promise<string> => {
+  return writeJson(
+    parsingConfig.storage.seekingDataDir,
+    `${filename}.json`,
+    data,
+  );
+};
+
+export const writeAmbiguousData = async <T>(
+  filename: string,
+  data: T,
+): Promise<string> => {
+  return writeJson(
+    parsingConfig.storage.ambiguousDataDir,
+    `${filename}.json`,
+    data,
+  );
+};
+
+export const writeNotHousingData = async <T>(
+  filename: string,
+  data: T,
+): Promise<string> => {
+  return writeJson(
+    parsingConfig.storage.notHousingDataDir,
+    `${filename}.json`,
+    data,
+  );
+};
+
+export const writeClassifiedData = async <T>(
+  filename: string,
+  data: T,
+): Promise<string> => {
+  return writeJson(
+    parsingConfig.storage.classifiedDataDir,
+    `${filename}.json`,
+    data,
+  );
+};
+
 export const writeFinalData = async <T>(
   filename: string,
   data: T,

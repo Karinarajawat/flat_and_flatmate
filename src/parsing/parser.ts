@@ -7,7 +7,13 @@ import { resolveCoordinates } from "@/service/geocoder";
 import { Listing } from "@/types/listing";
 import { RawPost } from "@/types/post";
 import { LISTING_STATUSES } from "@/config/model";
-import { writeFinalData, writeOfferingData } from "@/storage/storage";
+import {
+  writeAmbiguousData,
+  writeFinalData,
+  writeNotHousingData,
+  writeNotOfferingData,
+  writeOfferingData,
+} from "@/storage/storage";
 
 export interface ParseResult {
   listing: Listing | null;
@@ -143,6 +149,9 @@ export const parsePosts = async (
       );
 
       const offeringPosts: RawPost[] = [];
+      const notOfferingPosts: RawPost[] = [];
+      const ambiguousPosts: RawPost[] = [];
+      const notHousingPosts: RawPost[] = [];
       const finalListings: Listing[] = [];
 
       let skippedCount = 0;
@@ -163,8 +172,19 @@ export const parsePosts = async (
 
         const result = await parsePost(post);
 
-        if (result.listingType === "offering_room") {
-          offeringPosts.push(post);
+        switch (result.listingType) {
+          case "offering_room":
+            offeringPosts.push(post);
+            break;
+          case "seeking_room":
+            notOfferingPosts.push(post);
+            break;
+          case "ambiguous":
+            ambiguousPosts.push(post);
+            break;
+          case "not_housing":
+            notHousingPosts.push(post);
+            break;
         }
 
         if (result.status === "success" && result.listing) {
@@ -196,9 +216,30 @@ export const parsePosts = async (
         outputName,
         offeringPosts,
       );
+      const notOfferingOutputPath = await writeNotOfferingData(
+        outputName,
+        notOfferingPosts,
+      );
+      const ambiguousOutputPath = await writeAmbiguousData(
+        outputName,
+        ambiguousPosts,
+      );
+      const notHousingOutputPath = await writeNotHousingData(
+        outputName,
+        notHousingPosts,
+      );
 
       console.log(
         `Saved ${offeringPosts.length} offering posts to ${offeringOutputPath}`,
+      );
+      console.log(
+        `Saved ${notOfferingPosts.length} not offering posts to ${notOfferingOutputPath}`,
+      );
+      console.log(
+        `Saved ${ambiguousPosts.length} ambiguous posts to ${ambiguousOutputPath}`,
+      );
+      console.log(
+        `Saved ${notHousingPosts.length} not housing posts to ${notHousingOutputPath}`,
       );
 
       const finalOutputPath = await writeFinalData(outputName, finalListings);
@@ -209,6 +250,9 @@ export const parsePosts = async (
 
       console.log(
         `File complete: ${offeringPosts.length} offering, ` +
+          `${notOfferingPosts.length} not offering, ` +
+          `${ambiguousPosts.length} ambiguous, ` +
+          `${notHousingPosts.length} not housing, ` +
           `${finalListings.length} successful, ` +
           `${skippedCount} skipped, ` +
           `${failedCount} failed.`,

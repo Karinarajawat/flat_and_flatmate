@@ -38,6 +38,11 @@ export const TARGET_FACEBOOK_GROUPS = ["1223846759040286"];
 export const RAW_DATA_DIR = "data/raw";
 export const NORM_DATA_DIR = "data/normalised";
 export const OFFERING_DATA_DIR = "data/offering";
+export const NOT_OFFERING_DATA_DIR = "data/not_offering";
+export const SEEKING_DATA_DIR = "data/seeking";
+export const AMBIGUOUS_DATA_DIR = "data/ambiguous";
+export const NOT_HOUSING_DATA_DIR = "data/not_housing";
+export const CLASSIFIED_DATA_DIR = "data/classified";
 export const FINAL_DATA_DIR = "data/final";
 
 export const PLATFORMS = {

@@ -25,6 +25,7 @@ type Stats = {
   offering: number;
   seeking: number;
   ambiguous: number;
+  notHousing: number;
 
   // Experimental heuristic
   candidateOffering: number;
@@ -99,6 +100,7 @@ function createStats(): Stats {
     offering: 0,
     seeking: 0,
     ambiguous: 0,
+    notHousing: 0,
 
     candidateOffering: 0,
     candidateSeeking: 0,
@@ -221,6 +223,12 @@ function main() {
           fileStats.ambiguous++;
           overallStats.ambiguous++;
           community.ambiguous++;
+          break;
+
+        case "not_housing":
+          fileStats.notHousing++;
+          overallStats.notHousing++;
+          community.notHousing++;
           break;
       }
 

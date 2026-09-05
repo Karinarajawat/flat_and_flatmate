@@ -5,15 +5,19 @@ import { parsePost } from "@/parsing/parser";
 import { RedditClient } from "@/reddit/client";
 import { scrapeSubreddit } from "@/reddit/scraper";
 import {
+  writeAmbiguousData,
   writeFinalData,
   writeNormData,
+  writeNotHousingData,
+  writeNotOfferingData,
   writeOfferingData,
   writeRawData,
 } from "@/storage/storage";
 import { Listing } from "@/types/listing";
 import { ListingModel } from "@/types/listing.model";
+import { getOrCreateLocality } from "@/service/locality";
 import { FacebookPost, RawPost, RedditPost } from "@/types/post";
-import mongoose from "mongoose";
+import { connectDb, disconnectDb } from "@/storage/db";
 
 const progressBarWidth = 30;
 
@@ -77,12 +81,18 @@ const main = async () => {
     );
 
     const offeringPosts: RawPost[] = [];
+    const notOfferingPosts: RawPost[] = [];
+    const ambiguousPosts: RawPost[] = [];
+    const notHousingPosts: RawPost[] = [];
     const finalListings: Listing[] = [];
 
     const subgroupStats = {
       total: 0,
-      heuristic_valid: 0,
-      llm_skiped: 0,
+      offering: 0,
+      not_offering: 0,
+      ambiguous: 0,
+      not_housing: 0,
+      llm_skipped: 0,
       success: 0,
       failed: 0,
     };
@@ -91,9 +101,23 @@ const main = async () => {
       subgroupStats.total++;
       const result = await parsePost(post);
 
-      if (result.listingType === "offering_room") {
-        subgroupStats.heuristic_valid++;
-        offeringPosts.push(post);
+      switch (result.listingType) {
+        case "offering_room":
+          subgroupStats.offering++;
+          offeringPosts.push(post);
+          break;
+        case "seeking_room":
+          subgroupStats.not_offering++;
+          notOfferingPosts.push(post);
+          break;
+        case "ambiguous":
+          subgroupStats.ambiguous++;
+          ambiguousPosts.push(post);
+          break;
+        case "not_housing":
+          subgroupStats.not_housing++;
+          notHousingPosts.push(post);
+          break;
       }
 
       if (result.status === "success" && result.listing) {
@@ -101,7 +125,7 @@ const main = async () => {
         finalListings.push(result.listing);
       }
 
-      if (result.status === "llm_skipped") subgroupStats.llm_skiped++;
+      if (result.status === "llm_skipped") subgroupStats.llm_skipped++;
 
       if (result.status === "failed") {
         subgroupStats.failed++;
@@ -117,7 +141,7 @@ const main = async () => {
       process.stdout.write(
         `\r[${bar}] ${subgroupStats.total}/${posts.length} ` +
           `| Success: ${subgroupStats.success} ` +
-          `| Skipped: ${subgroupStats.llm_skiped} ` +
+          `| Skipped: ${subgroupStats.llm_skipped} ` +
           `| Failed: ${subgroupStats.failed}`,
       );
     }
@@ -127,6 +151,9 @@ const main = async () => {
 
     const filename = `${posts[0].platform}-${subgroup}-${jobTimestamp}`;
     await writeOfferingData(filename, offeringPosts);
+    await writeNotOfferingData(filename, notOfferingPosts);
+    await writeAmbiguousData(filename, ambiguousPosts);
+    await writeNotHousingData(filename, notHousingPosts);
     await writeFinalData(filename, finalListings);
 
     totalFinalListings.push(...finalListings);
@@ -134,18 +161,22 @@ const main = async () => {
     console.log(
       `[${posts[0].platform}-${subgroup}] ` +
         `total=${subgroupStats.total} ` +
-        `heuristic=${subgroupStats.heuristic_valid} ` +
-        `skipped=${subgroupStats.llm_skiped} ` +
+        `offering=${subgroupStats.offering} ` +
+        `not_offering=${subgroupStats.not_offering} ` +
+        `ambiguous=${subgroupStats.ambiguous} ` +
+        `not_housing=${subgroupStats.not_housing} ` +
+        `skipped=${subgroupStats.llm_skipped} ` +
         `success=${subgroupStats.success} ` +
         `failed=${subgroupStats.failed}`,
     );
   }
 
-  const mongoUri = process.env.MONGODB_URI;
-  if (!mongoUri) {
-    throw new Error("MONGODB_URI is not defined");
+  if (totalFinalListings.length === 0) {
+    console.log("\nNo valid listings to import into MongoDB.");
+    return;
   }
-  await mongoose.connect(mongoUri);
+
+  await connectDb();
 
   const mongoStats = {
     inserted: 0,
@@ -153,63 +184,94 @@ const main = async () => {
     failed: 0,
   };
 
-  for (const listing of totalFinalListings) {
-    try {
-      const existing = await ListingModel.exists({
-        "external_listing.source": listing.external_listing!.source,
-        "external_listing.url": listing.external_listing!.url,
-      });
+  try {
+    for (const listing of totalFinalListings) {
+      try {
+        const externalListing = listing.external_listing;
+        if (!externalListing?.source || !externalListing.url) {
+          mongoStats.skipped++;
+          continue;
+        }
 
-      if (existing) {
-        // console.log(`Already exists: ${listing.external_listing!.url}`);
-        mongoStats.skipped++;
-        continue;
-      }
+        const existing = await ListingModel.exists({
+          "external_listing.source": externalListing.source,
+          "external_listing.url": externalListing.url,
+        });
 
-      const document = {
-        data: {
-          ...listing.data,
+        if (existing) {
+          // console.log(`Already exists: ${listing.external_listing!.url}`);
+          mongoStats.skipped++;
+          continue;
+        }
 
-          // Apply Mongo defaults explicitly where useful.
-          images: listing.data.images ?? [],
-          status: listing.data.status ?? "active",
+        let localityId = listing.data.locality_id;
+        if (!localityId && listing.data.locality) {
+          const localityDoc = await getOrCreateLocality({
+            name: listing.data.locality,
+            city: listing.data.city,
+          });
+          localityId = localityDoc._id;
+        }
 
-          // Convert ISO string -> Date
-          available_from: listing.data.available_from
-            ? new Date(listing.data.available_from)
-            : undefined,
-        },
+        if (!localityId) {
+          throw new Error(
+            `Cannot insert listing "${listing.data.title}": missing locality`,
+          );
+        }
 
-        external_listing: {
-          ...listing.external_listing,
+        const { locality: _locality, ...dataFields } = listing.data;
 
-          lister: {
-            ...listing.external_listing!.lister,
-            life_style: listing.external_listing!.lister.life_style ?? [],
+        const document = {
+          data: {
+            ...dataFields,
+            locality_id: localityId,
+
+            // Apply Mongo defaults explicitly where useful.
+            images: listing.data.images ?? [],
+            status: listing.data.status ?? "active",
+
+            // Convert ISO string -> Date
+            available_from: listing.data.available_from
+              ? new Date(listing.data.available_from)
+              : undefined,
           },
-        },
 
-        views: listing.views ?? 0,
-        favorites: listing.favorites ?? 0,
-      };
+          external_listing: {
+            ...externalListing,
 
-      await ListingModel.create(document);
+            lister: {
+              ...externalListing.lister,
+              life_style: externalListing.lister.life_style ?? [],
+            },
+          },
 
-      mongoStats.inserted++;
-    } catch (error) {
-      mongoStats.failed++;
-      console.error(error);
+          views: listing.views ?? 0,
+          favorites: listing.favorites ?? 0,
+        };
+
+        await ListingModel.create(document);
+
+        mongoStats.inserted++;
+      } catch (error) {
+        mongoStats.failed++;
+        console.error(error);
+      }
     }
+
+    console.log("\nMongoDB import summary:");
+    console.log(`  Total listings: ${totalFinalListings.length}`);
+    console.log(`  Inserted:       ${mongoStats.inserted}`);
+    console.log(`  Skipped:        ${mongoStats.skipped}`);
+    console.log(`  Failed:         ${mongoStats.failed}`);
+  } finally {
+    await disconnectDb();
   }
-
-  console.log("\nMongoDB import summary:");
-  console.log(`  Total listings: ${totalFinalListings.length}`);
-  console.log(`  Inserted:       ${mongoStats.inserted}`);
-  console.log(`  Skipped:        ${mongoStats.skipped}`);
-  console.log(`  Failed:         ${mongoStats.failed}`);
-
-  await mongoose.disconnect();
-  console.log("Disconnected from MongoDB");
 };
 
-main();
+main().catch((error) => {
+  console.error(
+    "Pipeline job failed:",
+    error instanceof Error ? error.message : String(error),
+  );
+  process.exit(1);
+});

@@ -6,6 +6,8 @@ import mongoose from "mongoose";
 
 import { ListingModel } from "@/types/listing.model";
 import { Listing } from "@/types/listing";
+import { getOrCreateLocality } from "@/service/locality";
+import { connectDb, disconnectDb } from "@/storage/db";
 
 const main = async () => {
   const inputFiles = process.argv.slice(2);
@@ -17,17 +19,9 @@ const main = async () => {
     process.exit(1);
   }
 
-  const mongoUri = process.env.MONGODB_URI;
-
-  if (!mongoUri) {
-    throw new Error("MONGODB_URI is not defined");
-  }
-
   console.log(`Found ${inputFiles.length} input file(s).`);
 
-  await mongoose.connect(mongoUri);
-
-  console.log("Connected to MongoDB");
+  await connectDb();
 
   const stats = {
     files: 0,
@@ -93,9 +87,27 @@ const main = async () => {
             continue;
           }
 
+          let localityId = listing.data.locality_id;
+          if (!localityId && listing.data.locality) {
+            const localityDoc = await getOrCreateLocality({
+              name: listing.data.locality,
+              city: listing.data.city,
+            });
+            localityId = localityDoc._id;
+          }
+
+          if (!localityId) {
+            throw new Error(
+              `Cannot insert listing "${listing.data.title}": missing locality`,
+            );
+          }
+
+          const { locality: _locality, ...dataFields } = listing.data;
+
           const document = {
             data: {
-              ...listing.data,
+              ...dataFields,
+              locality_id: localityId,
               images: listing.data.images ?? [],
               status: listing.data.status ?? "active",
               available_from: listing.data.available_from
@@ -135,8 +147,7 @@ const main = async () => {
       console.log(`Finished: ${filename}`);
     }
   } finally {
-    await mongoose.disconnect();
-    console.log("\nDisconnected from MongoDB");
+    await disconnectDb();
   }
 
   console.log("\n========== Import Complete ==========");

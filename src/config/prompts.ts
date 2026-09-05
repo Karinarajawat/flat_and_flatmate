@@ -9,12 +9,13 @@ TODAY: ${today}
 
 RULES:
 - Extract only stated or unambiguously implied facts. Never invent.
-- Set skip=true ONLY if this is not a rental offering OR a CORE field (rent, city, locality) is genuinely missing.
-- Do NOT skip because optional/property details are missing. Keep incomplete but useful listings.
-- If bhk, occupancy, gender, furnishing, address, amenities, rules, etc. are unknown, use a valid default only when safe; otherwise skip ONLY if the missing field prevents a useful listing.
-- Do not use fake values such as rent=0.
+- If any detail or field (such as rent, deposit, brokerage, setup_cost, floor, carpet_area, total_occupancy, contact_number, etc.) is not present in the post, simply skip/omit that field.
+- Set skip=true ONLY if this is not a rental offering OR a core location field (city, locality) is genuinely missing.
+- Do NOT skip because rent or optional property details are missing. Keep incomplete but useful listings and omit the missing fields.
+- Do not use fake or default values such as rent=0. If rent is not stated in the post, omit the rent field entirely.
+- Only extract rent/deposit/brokerage/setup_cost when stated. "No brokerage"=0. If brokerage is not mentioned, omit brokerage.
 - skip=true -> return ONLY {"skip":true}.
-- skip=false -> return all required schema fields.
+- skip=false -> return valid extracted data omitting unstated optional fields.
 - Optional unknown fields: omit.
 - Prices: 15k=15000, 1.2L=120000.
 - Only extract rent/deposit/brokerage/setup_cost when stated. "No brokerage"=0.

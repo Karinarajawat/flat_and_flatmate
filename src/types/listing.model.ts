@@ -148,10 +148,10 @@ const listingDataSchema = new Schema(
       enum: CITIES,
     },
 
-    locality: {
-      type: String,
+    locality_id: {
+      type: Schema.Types.ObjectId,
+      ref: "Locality",
       required: true,
-      trim: true,
     },
 
     address: {
@@ -221,7 +221,6 @@ const listingDataSchema = new Schema(
 
     rent: {
       type: Number,
-      required: true,
       min: 0,
     },
 

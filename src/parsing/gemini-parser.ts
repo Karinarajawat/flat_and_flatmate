@@ -4,7 +4,7 @@ import {
   GeminiListingResponse,
   GeminiListingResponseSchema,
   GeminiListingResponseZodSchema,
-  ListingDataFromGemeni,
+  ListingDataFromGemini,
   ValidGeminiListing,
 } from "@/types/listing";
 
@@ -56,7 +56,7 @@ function normalizeGeminiResponse(
   result: ValidGeminiListing,
   post: RawPost,
 ): GeminiListingResponse {
-  const data: ListingDataFromGemeni = {
+  const data: ListingDataFromGemini = {
     ...result.data,
     available_from: undefined,
   };

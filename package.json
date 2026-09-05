@@ -13,6 +13,7 @@
     "count-valid-norm": "tsx src/jobs/count-valid-norm.ts",
     "parse": "tsx src/jobs/parse-posts.ts",
     "export": "tsx src/jobs/export-listings.ts",
+    "import:listings": "tsx src/jobs/export-listings.ts",
     "pipeline": "tsx src/jobs/pipeline.ts"
   },
   "repository": {
