@@ -9,7 +9,9 @@ TODAY: ${today}
 
 RULES:
 - Extract only stated or unambiguously implied facts. Never invent.
-- Set skip=true ONLY if this is not a rental offering OR a CORE field (rent, city, locality) is genuinely missing.
+- Set skip=true if this is not a rental offering OR any CORE field (rent, city, locality) is missing, empty, or appears to be a placeholder/fake value.
+- Rent must be a realistic positive amount actually stated in the post. If rent is 0, missing, or clearly a placeholder, set skip=true.
+- Locality must be a specific, geocodable area name (not just a city name). If missing, empty, or too vague, set skip=true.
 - Do NOT skip because optional/property details are missing. Keep incomplete but useful listings.
 - If bhk, occupancy, gender, furnishing, address, amenities, rules, etc. are unknown, use a valid default only when safe; otherwise skip ONLY if the missing field prevents a useful listing.
 - Do not use fake values such as rent=0.

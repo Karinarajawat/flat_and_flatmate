@@ -157,6 +157,7 @@ export const GeminiListingResponseSchema = {
 
         locality: {
           type: "string",
+          minLength: 1,
         },
 
         address: {
@@ -261,6 +262,7 @@ export const GeminiListingResponseSchema = {
 
         rent: {
           type: "number",
+          exclusiveMinimum: 0,
         },
 
         deposit: {
@@ -355,7 +357,7 @@ export const GeminiListingResponseZodSchema = z.discriminatedUnion("skip", [
 
       city: z.enum(CITIES),
 
-      locality: z.string(),
+      locality: z.string().min(1),
 
       address: z.string(),
 
@@ -399,7 +401,7 @@ export const GeminiListingResponseZodSchema = z.discriminatedUnion("skip", [
         }),
       ),
 
-      rent: z.number(),
+      rent: z.number().positive(),
 
       deposit: z.number().optional(),
 

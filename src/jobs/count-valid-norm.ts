@@ -228,14 +228,14 @@ function main() {
       // Experimental heuristic
       // --------------------------------
 
-      const candidateListingType = getCandidateListingType(rawPost);
+      const candidateResult = getCandidateListingType(rawPost);
 
-      updateCandidateStats(fileStats, candidateListingType);
-      updateCandidateStats(overallStats, candidateListingType);
-      updateCandidateStats(community, candidateListingType);
+      updateCandidateStats(fileStats, candidateResult.type);
+      updateCandidateStats(overallStats, candidateResult.type);
+      updateCandidateStats(community, candidateResult.type);
 
       if (
-        candidateListingType === "candidate_ambiguous" &&
+        candidateResult.type === "candidate_ambiguous" &&
         candidateAmbiguousPosts.length < 100
       ) {
         candidateAmbiguousPosts.push(rawPost);
