@@ -1,3 +1,5 @@
+import { logger } from "@/utils/logger";
+
 import type { RedditPost } from "@/types/post";
 import type { RedditListingChild, RedditMediaMetadata } from "@/types/reddit";
 
@@ -112,6 +114,8 @@ export function mapRedditPost(child: RedditListingChild): RedditPost {
   const data = child.data;
 
   const imageUrls = extractImageUrls(data);
+
+  logger.debug(`Mapped post ${data.id}: ${imageUrls.length} images`);
 
   return {
     platform: "reddit",

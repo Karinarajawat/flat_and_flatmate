@@ -262,7 +262,7 @@ export const GeminiListingResponseSchema = {
 
         rent: {
           type: "number",
-          exclusiveMinimum: 0,
+          minimum: 1,
         },
 
         deposit: {

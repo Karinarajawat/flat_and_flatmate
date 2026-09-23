@@ -1,6 +1,7 @@
 import { config } from "@/config/scrapping";
 import { RedditClient } from "@/reddit/client";
 import { mapRedditPost } from "@/reddit/mapper";
+import { logger } from "@/utils/logger";
 
 import type { RedditPost } from "@/types/post";
 import type { RedditListingChild, RedditListingResponse } from "@/types/reddit";
@@ -19,6 +20,8 @@ export const scrapeSubreddit = async (
 
   let after: string | null = null;
 
+  logger.info(`Scraping r/${subreddit} (limit=${maxPosts})`);
+
   while (posts.length < maxPosts) {
     const currentLimit = Math.min(limit, maxPosts - posts.length);
 
@@ -32,7 +35,7 @@ export const scrapeSubreddit = async (
 
     const requestPath = `/r/${subreddit}/new.json?${params.toString()}`;
 
-    console.log(`Fetching: ${requestPath}`);
+    logger.debug(`Fetching: ${requestPath}`);
 
     try {
       const response = await client.get<RedditListingResponse>(requestPath);
@@ -40,7 +43,7 @@ export const scrapeSubreddit = async (
       const children = response.data?.data?.children ?? [];
 
       if (children.length === 0) {
-        console.log(`No more posts found for r/${subreddit}.`);
+        logger.debug(`No more posts found for r/${subreddit}.`);
         break;
       }
 
@@ -50,6 +53,8 @@ export const scrapeSubreddit = async (
         posts.push(mapRedditPost(child));
       }
 
+      logger.debug(`Fetched ${children.length} posts (total: ${posts.length})`);
+
       after = response.data?.data?.after ?? null;
 
       await client.waitForRateLimit(response.headers);
@@ -58,7 +63,7 @@ export const scrapeSubreddit = async (
         break;
       }
     } catch (error) {
-      console.error(
+      logger.error(
         `Error fetching r/${subreddit}:`,
         error instanceof Error ? error.message : String(error),
       );
@@ -66,6 +71,8 @@ export const scrapeSubreddit = async (
       break;
     }
   }
+
+  logger.info(`Scraped ${posts.length} posts from r/${subreddit}`);
 
   return {
     rawPosts,

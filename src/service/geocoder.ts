@@ -1,10 +1,8 @@
 import https from "https";
+import { logger } from "@/utils/logger";
+import { sleep } from "@/utils";
 
 const cache = new Map<string, { latitude: number; longitude: number } | null>();
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function geocode(query: string) {
   if (!query.trim()) {
@@ -14,8 +12,11 @@ async function geocode(query: string) {
   const cacheKey = query.trim().toLowerCase();
 
   if (cache.has(cacheKey)) {
+    logger.debug(`Geocode cache hit: "${query}"`);
     return cache.get(cacheKey)!;
   }
+
+  logger.debug(`Geocode query: "${query}"`);
 
   const encoded = encodeURIComponent(query.trim());
 
@@ -71,6 +72,12 @@ async function geocode(query: string) {
 
   cache.set(cacheKey, result);
 
+  if (result) {
+    logger.debug(`Geocode result: [${result.longitude}, ${result.latitude}]`);
+  } else {
+    logger.debug(`Geocode: no results for "${query}"`);
+  }
+
   await sleep(1100);
 
   return result;
@@ -96,6 +103,8 @@ export async function resolveCoordinates(listing: {
   if (listing.city) {
     attempts.push(`${listing.city}, India`);
   }
+
+  logger.debug(`Geocode attempts: ${attempts.length}`);
 
   for (const query of attempts) {
     const coordinates = await geocode(query);

@@ -29,6 +29,8 @@ RULES:
 - neighborhood=only supported types with stated km distance.
 - Use the most specific enum. "Others" only when explicitly stated and no enum matches.
 - Never confuse Gas Stove/Gas Pipeline, Attached Bathroom/Others, Balcony/Others, Car Parking/Bike Parking.
+- Use comments to resolve ambiguities. If the OP says "taken", "rented", "booked", or "filled" in comments, set skip=true.
+- If the OP clarifies details in comments (rent amount, availability, gender preference, etc.), prefer the comment over the post body.
 
 MAPPINGS:
 "attached/private/dedicated bathroom/washroom" -> add_ons: "Attached Bathroom"
@@ -46,5 +48,10 @@ MAPPINGS:
 POST:
 """
 ${post.content}
+"""
+
+COMMENTS:
+"""
+${post.comments?.map((c) => `u/${c.author}: ${c.body}`).join("\n") ?? "No comments available."}
 """`;
 }

@@ -4,10 +4,6 @@ dotenv.config();
 import {
   RAW_DATA_DIR,
   FACEBOOK_DEFAULT_PAGES_TO_SCROLL,
-  FACEBOOK_NAVIGATION_FALLBACK_DELAY_MS,
-  FACEBOOK_NAVIGATION_TIMEOUT_MS,
-  FACEBOOK_SCROLL_DELAY_MS,
-  FACEBOOK_SEE_MORE_DELAY_MS,
   REDDIT_DEFAULT_FETCH_LIMIT,
   REDDIT_DEFAULT_MAX_POSTS,
   REDDIT_MAX_RETRIES,
@@ -18,7 +14,6 @@ import {
   TARGET_FACEBOOK_GROUPS,
   TARGET_SUBREDDITS,
   NORM_DATA_DIR,
-  FACEBOOK_VIEWPORT,
 } from "@/config/constants";
 
 export const config = {
@@ -43,14 +38,6 @@ export const config = {
     groups: TARGET_FACEBOOK_GROUPS,
 
     pagesToScroll: FACEBOOK_DEFAULT_PAGES_TO_SCROLL,
-
-    scrollDelayMs: FACEBOOK_SCROLL_DELAY_MS,
-    seeMoreDelayMs: FACEBOOK_SEE_MORE_DELAY_MS,
-
-    navigationTimeoutMs: FACEBOOK_NAVIGATION_TIMEOUT_MS,
-    navigationFallbackDelayMs: FACEBOOK_NAVIGATION_FALLBACK_DELAY_MS,
-
-    viewport: FACEBOOK_VIEWPORT,
 
     cookiesPath: process.env.FACEBOOK_COOKIES_PATH ?? "facebook_cookies.json",
   },

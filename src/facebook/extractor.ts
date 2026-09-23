@@ -8,7 +8,9 @@ export const extractFacebookPosts = async (
   return page.evaluate((groupId) => {
     const messageNodes = Array.from(
       document.querySelectorAll<HTMLElement>(
-        'div[data-ad-preview="message"], div[data-testid="post_message"]',
+        '[data-ad-rendering-role="story_message"], ' +
+          'div[data-ad-preview="message"], ' +
+          'div[data-testid="post_message"]',
       ),
     );
 
@@ -37,10 +39,13 @@ export const extractFacebookPosts = async (
       // Find post container
       // ----------------------------------------------------------
 
-      let postContainer: HTMLElement | null = messageEl.parentElement;
+      const articleAncestor = messageEl.closest('[role="article"]');
+      let postContainer: HTMLElement | null = articleAncestor
+        ? (articleAncestor as HTMLElement)
+        : messageEl.parentElement;
 
-      for (let depth = 0; depth < 20; depth++) {
-        if (!postContainer || !postContainer.parentElement) {
+      for (let depth = 0; depth < 20 && postContainer; depth++) {
+        if (!postContainer.parentElement) {
           break;
         }
 
@@ -61,6 +66,13 @@ export const extractFacebookPosts = async (
 
       if (!postContainer) {
         return;
+      }
+
+      // Prefer the outermost article for the container so author/URL/images
+      // resolve from the whole post card, not just the message body.
+      const outerArticle = messageEl.closest('[role="article"]');
+      if (outerArticle) {
+        postContainer = outerArticle as HTMLElement;
       }
 
       // ----------------------------------------------------------
@@ -138,32 +150,39 @@ export const extractFacebookPosts = async (
 
       let author = "Anonymous participant";
 
-      const userLinks = Array.from(
-        postContainer.querySelectorAll<HTMLAnchorElement>(
-          'a[href*="/user/"], ' +
-            'a[href*="profile.php"], ' +
-            'a[href*="/profile/"]',
-        ),
+      const profileName = postContainer.querySelector<HTMLElement>(
+        '[data-ad-rendering-role="profile_name"]',
       );
-
-      const nameLink = userLinks.find((link) => {
-        const text = link.innerText ? link.innerText.trim() : "";
-
-        return (
-          text.length > 0 &&
-          !link.querySelector("svg") &&
-          !link.querySelector("img")
-        );
-      });
-
-      if (nameLink) {
-        author = nameLink.innerText.trim().split("\n")[0];
+      if (profileName?.innerText) {
+        author = profileName.innerText.trim().split("\n")[0];
       } else {
-        const fallbackHeaderLink =
-          postContainer.querySelector<HTMLAnchorElement>("h2 a, h3 a, h4 a");
+        const userLinks = Array.from(
+          postContainer.querySelectorAll<HTMLAnchorElement>(
+            'a[href*="/user/"], ' +
+              'a[href*="profile.php"], ' +
+              'a[href*="/profile/"]',
+          ),
+        );
 
-        if (fallbackHeaderLink && fallbackHeaderLink.innerText) {
-          author = fallbackHeaderLink.innerText.trim().split("\n")[0];
+        const nameLink = userLinks.find((link) => {
+          const text = link.innerText ? link.innerText.trim() : "";
+
+          return (
+            text.length > 0 &&
+            !link.querySelector("svg") &&
+            !link.querySelector("img")
+          );
+        });
+
+        if (nameLink) {
+          author = nameLink.innerText.trim().split("\n")[0];
+        } else {
+          const fallbackHeaderLink =
+            postContainer.querySelector<HTMLAnchorElement>("h2 a, h3 a, h4 a");
+
+          if (fallbackHeaderLink && fallbackHeaderLink.innerText) {
+            author = fallbackHeaderLink.innerText.trim().split("\n")[0];
+          }
         }
       }
 

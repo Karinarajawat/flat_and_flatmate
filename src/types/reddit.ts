@@ -43,6 +43,8 @@ export interface RedditListingChild {
 
     is_gallery?: boolean;
 
+    removed_by_category?: string;
+
     gallery_data?: {
       items: RedditGalleryItem[];
     };
@@ -74,3 +76,19 @@ export interface RedditHttpResponse<T> {
   headers: Record<string, string | string[] | undefined>;
   statusCode: number;
 }
+
+export interface RedditComment {
+  author: string;
+  body: string;
+  created_utc: number;
+}
+
+export interface RedditCommentChild {
+  kind: string;
+  data: RedditComment;
+}
+
+export type RedditCommentsResponse = [
+  RedditListingResponse,
+  { data: { children: RedditCommentChild[] } },
+];

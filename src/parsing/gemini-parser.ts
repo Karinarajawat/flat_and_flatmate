@@ -11,6 +11,8 @@ import {
 import { RawPost } from "@/types/post";
 import { buildPrompt } from "@/config/prompts";
 import { config } from "@/config/parsing";
+import { logger } from "@/utils/logger";
+import { sleep } from "@/utils";
 
 export async function parseWithGemini(
   post: RawPost,
@@ -20,6 +22,8 @@ export async function parseWithGemini(
   }
 
   const prompt = buildPrompt(post);
+
+  logger.debug(`[${post.postId}] Sending prompt to Gemini (${prompt.length} chars)`);
 
   const requestBody = {
     contents: [
@@ -36,18 +40,23 @@ export async function parseWithGemini(
   const rawResponse = await makeGeminiRequest(requestBody);
   const parsed = JSON.parse(rawResponse);
 
+  logger.debug(`[${post.postId}] Gemini response: ${rawResponse.slice(0, 200)}`);
+
   const result = GeminiListingResponseZodSchema.safeParse(parsed);
 
   if (!result.success) {
-    console.error("Invalid Gemini listing:", result.error.format());
+    logger.error("Invalid Gemini listing:", result.error.format());
     throw new Error("Gemini returned invalid listing data");
   }
 
   if (result.data.skip) {
+    logger.debug(`[${post.postId}] Gemini: skip=true`);
     return {
       skip: true,
     };
   }
+
+  logger.debug(`[${post.postId}] Gemini: skip=false, rent=${result.data.data.rent}, locality=${result.data.data.locality}`);
 
   return normalizeGeminiResponse(result.data, post);
 }
@@ -86,10 +95,6 @@ function normalizeGeminiResponse(
       life_style: result.lister?.life_style ?? [],
     },
   };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function makeGeminiRequest(body: unknown): Promise<string> {

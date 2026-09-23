@@ -346,6 +346,11 @@ listingSchema.index({
   "data.location": "2dsphere",
 });
 
+listingSchema.index(
+  { "external_listing.source": 1, "external_listing.url": 1 },
+  { unique: true },
+);
+
 export type Listing = InferSchemaType<typeof listingSchema>;
 
 export const ListingModel = model<Listing>("Listing", listingSchema);

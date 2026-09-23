@@ -1,4 +1,5 @@
 import { RawPost } from "@/types/post";
+import { logger } from "@/utils/logger";
 
 export type ListingType =
   | "offering_room"
@@ -200,7 +201,10 @@ const NON_LISTING_RE: RegExp[] = [
 export function getListingType(post: RawPost): ListingType {
   const text = normalize(post.content);
 
+  logger.debug(`[${post.postId}] Normalized: "${text.slice(0, 100)}..."`);
+
   if (!HOUSING_SIGNAL.test(text)) {
+    logger.debug(`[${post.postId}] -> not_housing (no housing signal)`);
     return "not_housing";
   }
 
@@ -230,19 +234,28 @@ export function getListingType(post: RawPost): ListingType {
   if (DM_LEADS_RE.test(text)) seekScore += 3;
   if (DM_INTERESTED_RE.test(text)) offerScore += 2;
 
+  logger.debug(
+    `[${post.postId}] Scores: offer=${offerScore} seek=${seekScore} diff=${seekScore - offerScore}`,
+  );
+
   if (seekScore === 0 && offerScore === 0) {
+    logger.debug(`[${post.postId}] -> ambiguous (zero scores)`);
     return "ambiguous";
   }
 
   const isNonListing = NON_LISTING_RE.some((re) => re.test(text));
   if (isNonListing && Math.max(seekScore, offerScore) < 8) {
+    logger.debug(`[${post.postId}] -> ambiguous (non-listing pattern)`);
     return "ambiguous";
   }
 
   const diff = seekScore - offerScore;
   if (Math.abs(diff) < 3) {
+    logger.debug(`[${post.postId}] -> ambiguous (diff < 3)`);
     return "ambiguous";
   }
 
-  return diff > 0 ? "seeking_room" : "offering_room";
+  const result = diff > 0 ? "seeking_room" : "offering_room";
+  logger.debug(`[${post.postId}] -> ${result}`);
+  return result;
 }

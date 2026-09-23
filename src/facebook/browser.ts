@@ -123,6 +123,19 @@ export const navigateToFacebookGroup = async (
     return false;
   }
 
+  // Wait for the group feed (or any post) before returning — FB hydrates
+  // the timeline after DOMContentLoaded.
+  try {
+    await page.waitForSelector(
+      'div[role="feed"], [data-ad-rendering-role="story_message"], div[role="article"]',
+      { timeout: 20_000 },
+    );
+  } catch {
+    console.log("Feed selector not found after wait; continuing anyway...");
+  }
+
+  await page.waitForTimeout(3_000);
+
   return true;
 };
 

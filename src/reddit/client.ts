@@ -2,6 +2,8 @@ import https from "https";
 
 import { config } from "@/config/scrapping";
 import { REDDIT_API_HOST, REDDIT_USER_AGENT } from "@/config/constants";
+import { logger } from "@/utils/logger";
+import { sleep } from "@/utils";
 
 import type { RedditHttpResponse } from "@/types/reddit";
 
@@ -19,11 +21,11 @@ export class RedditClient {
           throw error;
         }
 
-        console.warn(
+        logger.warn(
           `Reddit request failed. Retrying ${attempt}/${config.reddit.maxRetries}...`,
         );
 
-        await this.sleep(config.reddit.retryDelayMs);
+        await sleep(config.reddit.retryDelayMs);
       }
     }
   }
@@ -38,9 +40,7 @@ export class RedditClient {
         headers.Cookie = config.reddit.cookie;
       }
 
-      console.log(
-        `Reddit authentication: ${config.reddit.cookie ? "Cookie" : "None"}`,
-      );
+      logger.debug(`GET ${requestPath}`);
 
       const request = https.get(
         {
@@ -58,7 +58,7 @@ export class RedditClient {
           const reset = response.headers["x-ratelimit-reset"];
 
           if (remaining !== undefined && reset !== undefined) {
-            console.log(
+            logger.debug(
               `Rate Limits -> Remaining: ${remaining}, Reset in: ${reset}s`,
             );
           }
@@ -123,18 +123,14 @@ export class RedditClient {
           config.reddit.rateLimitBufferSeconds) *
         1000;
 
-      console.log(
-        `Warning: Rate limits remaining: ${remaining}. Cooling down for ${cooldown / 1000}s...`,
+      logger.warn(
+        `Rate limits remaining: ${remaining}. Cooling down for ${cooldown / 1000}s...`,
       );
 
-      await this.sleep(cooldown);
+      await sleep(cooldown);
       return;
     }
 
-    await this.sleep(config.reddit.requestDelayMs);
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    await sleep(config.reddit.requestDelayMs);
   }
 }

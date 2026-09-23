@@ -8,6 +8,11 @@ export interface RawPost {
   timestamp: string;
   postUrl: string;
   imageUrls?: string[];
+  comments?: Array<{
+    author: string;
+    body: string;
+    created_utc: number;
+  }>;
 }
 
 export interface RedditPost extends RawPost {

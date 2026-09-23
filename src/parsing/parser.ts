@@ -1,36 +1,84 @@
-import fs from "fs/promises";
-import path from "path";
-
 import { parseWithGemini } from "@/parsing/gemini-parser";
 import { getListingType, ListingType } from "@/parsing/heuristics";
+import { fetchPostWithComments } from "@/reddit/comments";
+import { extractPostId, TAKEN_RE } from "@/reddit/utils";
 import { resolveCoordinates } from "@/service/geocoder";
 import { Listing } from "@/types/listing";
 import { RawPost } from "@/types/post";
+import { RedditClient } from "@/reddit/client";
 import { LISTING_STATUSES } from "@/config/model";
-import { writeFinalData, writeOfferingData } from "@/storage/storage";
+import { logger } from "@/utils/logger";
 
 export interface ParseResult {
   listing: Listing | null;
   listingType: ListingType;
-  status: "success" | "skipped" | "llm_skipped" | "failed";
+  status: "success" | "skipped" | "stale" | "llm_skipped" | "failed";
   error?: string;
 }
 
-export const parsePost = async (post: RawPost): Promise<ParseResult> => {
-  const listingType = getListingType(post);
+export interface ParsePostOptions {
+  /** Pipeline already ran getListingType; skip the internal re-run. */
+  heuristicsDone?: boolean;
+  /** Precomputed listingType when heuristicsDone is true. */
+  listingType?: ListingType;
+}
 
-  if (listingType !== "offering_room") {
-    return {
-      listing: null,
-      listingType,
-      status: "skipped",
-    };
+export const parsePost = async (
+  post: RawPost,
+  redditClient?: RedditClient,
+  options: ParsePostOptions = {},
+): Promise<ParseResult> => {
+  let listingType: ListingType;
+
+  if (options.heuristicsDone && options.listingType) {
+    listingType = options.listingType;
+    if (listingType !== "offering_room") {
+      logger.debug(`[${post.postId}] Skipped: ${listingType}`);
+      return {
+        listing: null,
+        listingType,
+        status: "skipped",
+      };
+    }
+  } else {
+    listingType = getListingType(post);
+
+    if (listingType !== "offering_room") {
+      logger.debug(`[${post.postId}] Skipped: ${listingType}`);
+      return {
+        listing: null,
+        listingType,
+        status: "skipped",
+      };
+    }
   }
 
   try {
+    // Fetch comments for Reddit posts after heuristic passes
+    if (post.platform === "reddit" && redditClient) {
+      const postId = extractPostId(post.postUrl);
+      if (postId) {
+        const { comments } = await fetchPostWithComments(redditClient, postId);
+        post.comments = comments;
+
+        // Check for stale signals from OP
+        const opComments = comments.filter((c) => c.author === post.author);
+        const isStale = opComments.some((c) => TAKEN_RE.test(c.body));
+        if (isStale) {
+          logger.debug(`[${post.postId}] Skipped: stale OP comment`);
+          return {
+            listing: null,
+            listingType,
+            status: "stale",
+          };
+        }
+      }
+    }
+
     const geminiResponse = await parseWithGemini(post);
 
     if (geminiResponse.skip) {
+      logger.debug(`[${post.postId}] Skipped: Gemini skip=true`);
       return {
         listing: null,
         listingType,
@@ -39,6 +87,8 @@ export const parsePost = async (post: RawPost): Promise<ParseResult> => {
     }
 
     const { data, lister } = geminiResponse;
+
+    logger.debug(`[${post.postId}] Geocoding: ${data.locality}, ${data.city}`);
 
     const coordinates = await resolveCoordinates({
       address: data.address,
@@ -51,6 +101,10 @@ export const parsePost = async (post: RawPost): Promise<ParseResult> => {
         `Could not geocode listing: ${data.locality}, ${data.city}`,
       );
     }
+
+    logger.debug(
+      `[${post.postId}] Geocoded: [${coordinates.longitude}, ${coordinates.latitude}]`,
+    );
 
     const listing: Listing = {
       data: {
@@ -91,145 +145,4 @@ export const parsePost = async (post: RawPost): Promise<ParseResult> => {
       error: error instanceof Error ? error.message : String(error),
     };
   }
-};
-
-export const parsePosts = async (
-  inputFiles: string[],
-  limit: number,
-): Promise<void> => {
-  if (inputFiles.length === 0) {
-    console.log("No input files provided.");
-    return;
-  }
-
-  if (limit <= 0) {
-    console.log("Parse limit must be greater than 0.");
-    return;
-  }
-
-  let successfulListings = 0;
-  let totalSkipped = 0;
-  let totalFailed = 0;
-  let totalOffering = 0;
-
-  for (const inputFile of inputFiles) {
-    if (successfulListings >= limit) {
-      break;
-    }
-
-    console.log(`\nParsing file: ${inputFile}`);
-
-    try {
-      const inputFileName = path.basename(inputFile, ".json");
-
-      const content = await fs.readFile(inputFile, "utf8");
-      const parsed: unknown = JSON.parse(content);
-
-      if (!Array.isArray(parsed)) {
-        throw new Error(`Expected ${inputFile} to contain a JSON array`);
-      }
-
-      const posts = parsed as RawPost[];
-
-      if (posts.length === 0) {
-        console.log(`No posts found in ${inputFile}.`);
-        continue;
-      }
-
-      const remaining = limit - successfulListings;
-
-      console.log(
-        `Loaded ${posts.length} posts. Listings remaining: ${remaining}`,
-      );
-
-      const offeringPosts: RawPost[] = [];
-      const finalListings: Listing[] = [];
-
-      let skippedCount = 0;
-      let failedCount = 0;
-
-      let processedCount = 0;
-
-      for (const post of posts) {
-        if (finalListings.length >= remaining) {
-          break;
-        }
-
-        processedCount++;
-
-        console.log(
-          `Processing [${processedCount}/${posts.length}] - ${inputFileName}`,
-        );
-
-        const result = await parsePost(post);
-
-        if (result.listingType === "offering_room") {
-          offeringPosts.push(post);
-        }
-
-        if (result.status === "success" && result.listing) {
-          finalListings.push(result.listing);
-
-          console.log("SUCCESS");
-        }
-
-        if (result.status === "skipped") {
-          skippedCount++;
-        }
-
-        if (result.status === "failed") {
-          failedCount++;
-
-          console.log(`FAILED | ${result.error}`);
-        }
-      }
-
-      successfulListings += finalListings.length;
-
-      totalOffering += offeringPosts.length;
-      totalSkipped += skippedCount;
-      totalFailed += failedCount;
-
-      const outputName = `parsed-${inputFileName}`;
-
-      const offeringOutputPath = await writeOfferingData(
-        outputName,
-        offeringPosts,
-      );
-
-      console.log(
-        `Saved ${offeringPosts.length} offering posts to ${offeringOutputPath}`,
-      );
-
-      const finalOutputPath = await writeFinalData(outputName, finalListings);
-
-      console.log(
-        `Saved ${finalListings.length} final listings to ${finalOutputPath}`,
-      );
-
-      console.log(
-        `File complete: ${offeringPosts.length} offering, ` +
-          `${finalListings.length} successful, ` +
-          `${skippedCount} skipped, ` +
-          `${failedCount} failed.`,
-      );
-    } catch (error) {
-      console.error(
-        `Failed to parse ${inputFile}:`,
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
-
-  console.log(
-    `\nParsing job complete. ` +
-      `Parsed ${successfulListings}/${limit} listings.`,
-  );
-
-  console.log(
-    `Total: ${totalOffering} offering, ` +
-      `${successfulListings} successful, ` +
-      `${totalSkipped} skipped, ` +
-      `${totalFailed} failed.`,
-  );
 };
