@@ -91,8 +91,10 @@ export const parsePost = async (
     // Deterministic guard: prompt requires skip=true when any REQUIRED
     // field is missing/placeholder, but the LLM is non-binding. Enforce
     // here so incomplete or whole-flat listings never reach geocode/DB.
-    // Allowed exceptions only: furnished_status (defaults to
-    // "unfurnished") and rental_scope.total_occupancy (optional).
+    // Allowed defaults (never skip): address falls back to locality
+    // (geocoder appends ", locality, city, India"), capacity defaults to
+    // 1, furnished_status defaults to "unfurnished",
+    // rental_scope.total_occupancy is optional.
     const missingField = findMissingRequiredField(data);
 
     if (missingField) {
@@ -106,12 +108,39 @@ export const parsePost = async (
       };
     }
 
+    // A private room with no sharing words implies single occupancy.
+    const capacity =
+      typeof data.rental_scope?.capacity === "number" &&
+      data.rental_scope.capacity >= 1
+        ? data.rental_scope.capacity
+        : 1;
+
+    if (
+      typeof data.rental_scope?.capacity !== "number" ||
+      data.rental_scope.capacity < 1
+    ) {
+      logger.debug(`[${post.postId}] Capacity defaulted to 1`);
+    }
+
+    // Either locality or society/landmark works as the address: the
+    // geocoder tries "address, locality, city, India" first and falls
+    // back to "locality, city, India", so a locality-only address still
+    // geocodes. Never store an empty address (Mongoose requires it).
+    const rawAddress = data.property.address?.trim();
+    const address = rawAddress || data.property.locality;
+
+    if (!rawAddress) {
+      logger.debug(
+        `[${post.postId}] Address fallback to locality: ${data.property.locality}`,
+      );
+    }
+
     logger.debug(
       `[${post.postId}] Geocoding: ${data.property.locality}, ${data.property.city}`,
     );
 
     const coordinates = await resolveCoordinates({
-      address: data.property.address,
+      address,
       locality: data.property.locality,
       city: data.property.city,
     });
@@ -135,6 +164,7 @@ export const parsePost = async (
 
       property: {
         ...data.property,
+        address,
         furnished_status: data.property.furnished_status ?? "unfurnished",
         attached_washroom: data.property.attached_washroom ?? false,
 
@@ -144,7 +174,10 @@ export const parsePost = async (
         },
       },
 
-      rental_scope: data.rental_scope,
+      rental_scope: {
+        ...data.rental_scope,
+        capacity,
+      },
 
       pricing: data.pricing,
 
@@ -197,28 +230,25 @@ export const parsePost = async (
 /**
  * Returns the name of the first missing/invalid REQUIRED field, or null
  * when the Gemini payload satisfies the deterministic prompt contract.
- * furnished_status and rental_scope.total_occupancy are intentionally
- * excluded (allowed default / optional).
+ * Intentionally excluded (allowed defaults, never skip): property.address
+ * (falls back to locality — geocoder appends ", locality, city, India"),
+ * rental_scope.capacity (defaults to 1 for a private room),
+ * property.furnished_status (defaults to "unfurnished") and
+ * rental_scope.total_occupancy (optional).
  */
 function findMissingRequiredField(data: GeminiListingData): string | null {
   if (!data.property?.bhk) return "property.bhk";
   if (!data.property?.city) return "property.city";
 
+  // Either locality or a society/landmark address works; locality is the
+  // hard requirement, address falls back to it in parsePost.
   if (!data.property?.locality?.trim()) return "property.locality";
-  if (!data.property?.address?.trim()) return "property.address";
 
   if (
     data.rental_scope?.type !== "room" &&
     data.rental_scope?.type !== "hall"
   ) {
     return "rental_scope.type";
-  }
-
-  if (
-    typeof data.rental_scope?.capacity !== "number" ||
-    data.rental_scope.capacity < 1
-  ) {
-    return "rental_scope.capacity";
   }
 
   // Reject placeholder rents (0/1) the prompt explicitly forbids.

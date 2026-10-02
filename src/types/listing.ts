@@ -227,8 +227,11 @@ export const externalListingSchema = z.object({
 /* Gemini Listing                                                             */
 /* -------------------------------------------------------------------------- */
 export type GeminiListingData = {
-  property: Omit<Property, "location">;
-  rental_scope: RentalScope;
+  // address is optional from Gemini: parser falls back to locality.
+  property: Omit<Property, "location" | "address"> & { address?: string };
+  // capacity is optional from Gemini: a private room with no sharing
+  // words implies single occupancy and the parser defaults it to 1.
+  rental_scope: Omit<RentalScope, "capacity"> & { capacity?: number };
   pricing: Pricing;
   availability: Availability;
   preferences?: Preferences;
@@ -248,10 +251,18 @@ export const geminiListingDataSchema = z.object({
     floor: z.number().min(0).optional(),
     city: z.enum(CITIES),
     locality: z.string(),
-    address: z.string(),
+    // Optional: parser falls back to locality (geocoder appends
+    // ", locality, city, India"), so a locality-only post still passes.
+    address: z.string().optional(),
   }),
 
-  rental_scope: rentalScopeSchema,
+  // Capacity is optional here: a private room with no sharing words
+  // implies single occupancy and the parser defaults it to 1.
+  rental_scope: z.object({
+    type: z.enum(["room", "hall"]),
+    capacity: z.number().min(1).optional(),
+    total_occupancy: z.number().min(1).optional(),
+  }),
 
   pricing: pricingSchema,
 
@@ -335,7 +346,6 @@ export const GeminiListingResponseSchema = {
             "furnished_status",
             "city",
             "locality",
-            "address",
           ],
         },
 
@@ -346,7 +356,7 @@ export const GeminiListingResponseSchema = {
             capacity: { type: "number" },
             total_occupancy: { type: "number" },
           },
-          required: ["type", "capacity"],
+          required: ["type"],
         },
 
         pricing: {

@@ -13,50 +13,50 @@ export const REDDIT_RETRY_DELAY_MS = 5_000;
 
 export const REDDIT_API_HOST = "www.reddit.com";
 
-export const TARGET_SUBREDDITS = ["PuneFlat_Flatmates"];
+// export const TARGET_SUBREDDITS = ["PuneFlat_Flatmates"];
 
-export const TARGET_FACEBOOK_GROUPS = ["puneflatandflatmate"];
+// export const TARGET_FACEBOOK_GROUPS = ["puneflatandflatmate"];
 
-// export const TARGET_SUBREDDITS = [
-//   // Mumbai
-//   "flatmatesmumbai",
-//   "mumbai_flat_flatmates",
+export const TARGET_SUBREDDITS = [
+  // Mumbai
+  "flatmatesmumbai",
+  "mumbai_flat_flatmates",
 
-//   // Pune
-//   "PuneFlat_Flatmates",
-//   "PuneClassifieds",
+  // Pune
+  "PuneFlat_Flatmates",
+  "PuneClassifieds",
 
-//   // Bangalore
-//   "Bangalore_Rentals",
-//   "BangaloreFlatsRental",
+  // Bangalore
+  //   "Bangalore_Rentals",
+  //   "BangaloreFlatsRental",
 
-//   // Hyderabad
-//   "HyderabadRentals",
-//   "HyderabadFlatRentals",
-// ];
+  // Hyderabad
+  //   "HyderabadRentals",
+  //   "HyderabadFlatRentals",
+];
 
-// export const TARGET_FACEBOOK_GROUPS = [
-//   "888958910077001",
-//   "760226298282187",
-//   "1123961058804292",
-//   "607379197814656",
-//   "647914020401448",
-//   "3140606822849177",
-//   "296704767506035",
-//   "200531650702980",
-//   "641314477149817",
-//   "flatandflatmatespuneindia",
-//   "345164347222362",
-//   "1223846759040286",
-//   "3439521116058746",
-//   "puneflatandflatmate",
-//   "rentingpune",
-//   "166919238142189",
-//   "flatsandflatmatesbangalorefacebook",
-//   "flatsandflatmatesbangalorefacebook",
-//   "findmyroombangalore",
-//   "findmyroombangalore",
-// ];
+export const TARGET_FACEBOOK_GROUPS = [
+  "888958910077001",
+  "760226298282187",
+  "1123961058804292",
+  "607379197814656",
+  "647914020401448",
+  "3140606822849177",
+  "296704767506035",
+  "200531650702980",
+  "641314477149817",
+  "flatandflatmatespuneindia",
+  "345164347222362",
+  "1223846759040286",
+  "3439521116058746",
+  "puneflatandflatmate",
+  "rentingpune",
+  "166919238142189",
+  //   "flatsandflatmatesbangalorefacebook",
+  //   "flatsandflatmatesbangalorefacebook",
+  //   "findmyroombangalore",
+  //   "findmyroombangalore",
+];
 
 export const FACEBOOK_DEFAULT_PAGES_TO_SCROLL = 20;
 
