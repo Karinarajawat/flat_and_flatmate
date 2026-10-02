@@ -65,6 +65,7 @@ const propertySchema = new Schema(
       type: String,
       required: true,
       enum: FURNISHED_STATUSES,
+      default: "unfurnished",
     },
 
     floor: {
@@ -118,7 +119,6 @@ const rentalScopeSchema = new Schema(
 
     total_occupancy: {
       type: Number,
-      required: true,
       min: 1,
     },
   },

@@ -61,7 +61,7 @@ export async function parseWithGemini(
   }
 
   logger.debug(
-    `[${post.postId}] Gemini: skip=false, rent=${result.data.data.pricing.rent}, locality=${result.data.data.property.locality}`,
+    `[${post.postId}] Gemini: skip=false, rent=${result.data.data.pricing.rent}, locality=${result.data.data.property.locality}, bhk=${result.data.data.property.bhk}, scope=${result.data.data.rental_scope.type}/${result.data.data.rental_scope.capacity}`,
   );
 
   return normalizeGeminiResponse(result.data, post);

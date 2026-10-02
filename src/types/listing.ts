@@ -74,13 +74,13 @@ export const propertySchema = z.object({
 export type RentalScope = {
   type: "room" | "hall";
   capacity: number;
-  total_occupancy: number;
+  total_occupancy?: number;
 };
 
 export const rentalScopeSchema = z.object({
   type: z.enum(["room", "hall"]),
   capacity: z.number().min(1),
-  total_occupancy: z.number().min(1),
+  total_occupancy: z.number().min(1).optional(),
 });
 
 /* -------------------------------------------------------------------------- */
@@ -346,7 +346,7 @@ export const GeminiListingResponseSchema = {
             capacity: { type: "number" },
             total_occupancy: { type: "number" },
           },
-          required: ["type", "capacity", "total_occupancy"],
+          required: ["type", "capacity"],
         },
 
         pricing: {

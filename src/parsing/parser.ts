@@ -3,7 +3,7 @@ import { getListingType, ListingType } from "@/parsing/heuristics";
 import { fetchPostWithComments } from "@/reddit/comments";
 import { extractPostId, TAKEN_RE } from "@/reddit/utils";
 import { resolveCoordinates } from "@/service/geocoder";
-import { Listing } from "@/types/listing";
+import { GeminiListingData, Listing } from "@/types/listing";
 import { RawPost } from "@/types/post";
 import { RedditClient } from "@/reddit/client";
 import { LISTING_STATUSES } from "@/config/model";
@@ -88,6 +88,24 @@ export const parsePost = async (
 
     const { data } = geminiResponse;
 
+    // Deterministic guard: prompt requires skip=true when any REQUIRED
+    // field is missing/placeholder, but the LLM is non-binding. Enforce
+    // here so incomplete or whole-flat listings never reach geocode/DB.
+    // Allowed exceptions only: furnished_status (defaults to
+    // "unfurnished") and rental_scope.total_occupancy (optional).
+    const missingField = findMissingRequiredField(data);
+
+    if (missingField) {
+      logger.debug(
+        `[${post.postId}] Skipped: Gemini missing required field ${missingField}`,
+      );
+      return {
+        listing: null,
+        listingType,
+        status: "llm_skipped",
+      };
+    }
+
     logger.debug(
       `[${post.postId}] Geocoding: ${data.property.locality}, ${data.property.city}`,
     );
@@ -117,6 +135,7 @@ export const parsePost = async (
 
       property: {
         ...data.property,
+        furnished_status: data.property.furnished_status ?? "unfurnished",
         attached_washroom: data.property.attached_washroom ?? false,
 
         location: {
@@ -174,3 +193,42 @@ export const parsePost = async (
     };
   }
 };
+
+/**
+ * Returns the name of the first missing/invalid REQUIRED field, or null
+ * when the Gemini payload satisfies the deterministic prompt contract.
+ * furnished_status and rental_scope.total_occupancy are intentionally
+ * excluded (allowed default / optional).
+ */
+function findMissingRequiredField(data: GeminiListingData): string | null {
+  if (!data.property?.bhk) return "property.bhk";
+  if (!data.property?.city) return "property.city";
+
+  if (!data.property?.locality?.trim()) return "property.locality";
+  if (!data.property?.address?.trim()) return "property.address";
+
+  if (
+    data.rental_scope?.type !== "room" &&
+    data.rental_scope?.type !== "hall"
+  ) {
+    return "rental_scope.type";
+  }
+
+  if (
+    typeof data.rental_scope?.capacity !== "number" ||
+    data.rental_scope.capacity < 1
+  ) {
+    return "rental_scope.capacity";
+  }
+
+  // Reject placeholder rents (0/1) the prompt explicitly forbids.
+  if (typeof data.pricing?.rent !== "number" || data.pricing.rent <= 1) {
+    return "pricing.rent";
+  }
+
+  if (typeof data.availability?.available_immediately !== "boolean") {
+    return "availability.available_immediately";
+  }
+
+  return null;
+}
