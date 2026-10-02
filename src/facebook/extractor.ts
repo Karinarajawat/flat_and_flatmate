@@ -5,7 +5,9 @@ export const extractFacebookPosts = async (
   page: Page,
   groupId: string,
 ): Promise<FacebookPost[]> => {
-  return page.evaluate((groupId) => {
+  // NOTE: no named functions inside page.evaluate — esbuild keepNames
+  // breaks serialization. Inline arrow callbacks only.
+  const posts = await page.evaluate((groupId) => {
     const messageNodes = Array.from(
       document.querySelectorAll<HTMLElement>(
         '[data-ad-rendering-role="story_message"], ' +
@@ -16,10 +18,6 @@ export const extractFacebookPosts = async (
 
     const extracted: FacebookPost[] = [];
     const seenTexts = new Set<string>();
-
-    // ------------------------------------------------------------
-    // PRIMARY EXTRACTION
-    // ------------------------------------------------------------
 
     messageNodes.forEach((messageEl) => {
       let postText = messageEl.innerText ? messageEl.innerText.trim() : "";
@@ -35,51 +33,32 @@ export const extractFacebookPosts = async (
         return;
       }
 
-      // ----------------------------------------------------------
-      // Find post container
-      // ----------------------------------------------------------
-
-      const articleAncestor = messageEl.closest('[role="article"]');
-      let postContainer: HTMLElement | null = articleAncestor
-        ? (articleAncestor as HTMLElement)
-        : messageEl.parentElement;
-
-      for (let depth = 0; depth < 20 && postContainer; depth++) {
-        if (!postContainer.parentElement) {
-          break;
-        }
-
-        if (
-          postContainer.getAttribute("role") === "article" ||
-          postContainer.parentElement.getAttribute("role") === "feed" ||
-          postContainer.classList.contains("x1yztbdb")
-        ) {
-          break;
-        }
-
-        postContainer = postContainer.parentElement;
-      }
+      // Post card scope: nearest article, else climb to the feed-level
+      // child so author/URL/images resolve from the whole post card,
+      // not just the message body.
+      let postContainer: HTMLElement | null =
+        messageEl.closest('[role="article"]') as HTMLElement | null;
 
       if (!postContainer) {
         postContainer = messageEl.parentElement;
+
+        for (
+          let depth = 0;
+          depth < 10 && postContainer?.parentElement;
+          depth++
+        ) {
+          if (postContainer.parentElement.getAttribute("role") === "feed") {
+            break;
+          }
+
+          postContainer = postContainer.parentElement;
+        }
       }
 
       if (!postContainer) {
         return;
       }
 
-      // Prefer the outermost article for the container so author/URL/images
-      // resolve from the whole post card, not just the message body.
-      const outerArticle = messageEl.closest('[role="article"]');
-      if (outerArticle) {
-        postContainer = outerArticle as HTMLElement;
-      }
-
-      // ----------------------------------------------------------
-      // Post URL + ID
-      // ----------------------------------------------------------
-
-      let postIdFound: string | null = null;
       const anchors = Array.from(postContainer.querySelectorAll<HTMLAnchorElement>("a"));
       const validHrefs = anchors
         .map((a) => a.href)
@@ -93,41 +72,7 @@ export const extractFacebookPosts = async (
             !href.includes("/profile/"),
         );
 
-      for (const href of validHrefs) {
-        const postMatch = href.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
-        if (postMatch?.[1]) {
-          postIdFound = postMatch[1];
-          break;
-        }
-        const setMatch = href.match(/set=(?:pcb|gm|a)\.(\d+)/);
-        if (setMatch?.[1]) {
-          postIdFound = setMatch[1];
-          break;
-        }
-        const storyMatch = href.match(/(?:story_fbid|fbid)=(\d+)/);
-        if (storyMatch?.[1]) {
-          postIdFound = storyMatch[1];
-          break;
-        }
-      }
-
-      if (!postIdFound) {
-        const html = postContainer.outerHTML || "";
-        const postMatch = html.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
-        if (postMatch?.[1]) {
-          postIdFound = postMatch[1];
-        } else {
-          const setMatch = html.match(/set=(?:pcb|gm|a)\.(\d+)/);
-          if (setMatch?.[1]) {
-            postIdFound = setMatch[1];
-          } else {
-            const storyMatch = html.match(/(?:story_fbid|fbid)=(\d+)/);
-            if (storyMatch?.[1]) {
-              postIdFound = storyMatch[1];
-            }
-          }
-        }
-      }
+      const containerHtml = postContainer.outerHTML || "";
 
       let hash = 0;
       const textToHash = postText.slice(0, 100);
@@ -137,16 +82,149 @@ export const extractFacebookPosts = async (
       }
       const fallbackId = "fb_" + Math.abs(hash).toString(36);
 
-      const postId = postIdFound || fallbackId;
-      const postUrl = postIdFound
-        ? `https://www.facebook.com/groups/${groupId}/posts/${postIdFound}`
-        : "";
+      // Post identity: /posts/|permalink|, set=pcb., story_fbid/fbid,
+      // /reel/, /stories/ (base64 token holds the fbid), /watch/?v=,
+      // opaque /share/r|v|p/ links.
+      let resolvedId: string | null = null;
+      let resolvedUrl = "";
+
+      for (const href of validHrefs) {
+        const pm1 = href.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
+        const pm2 = pm1 ? null : href.match(/set=(?:pcb|gm|a)\.(\d+)/);
+        const pm3 =
+          pm1 || pm2 ? null : href.match(/(?:story_fbid|fbid)=(\d+)/);
+        const pmid = pm1?.[1] ?? pm2?.[1] ?? pm3?.[1] ?? null;
+        if (pmid) {
+          resolvedId = pmid;
+          resolvedUrl = `https://www.facebook.com/groups/${groupId}/posts/${pmid}`;
+          break;
+        }
+      }
+
+      if (!resolvedId) {
+        const pm1 = containerHtml.match(
+          /\/(?:posts|permalink|multi_permalink)\/(\d+)/,
+        );
+        const pm2 = pm1 ? null : containerHtml.match(/set=(?:pcb|gm|a)\.(\d+)/);
+        const pm3 =
+          pm1 || pm2 ? null : containerHtml.match(/(?:story_fbid|fbid)=(\d+)/);
+        const pmid = pm1?.[1] ?? pm2?.[1] ?? pm3?.[1] ?? null;
+        if (pmid) {
+          resolvedId = pmid;
+          resolvedUrl = `https://www.facebook.com/groups/${groupId}/posts/${pmid}`;
+        }
+      }
+
+      // Reels have no /posts/ link — the /reel/<mediaId>/ IS the id.
+      if (!resolvedId) {
+        for (const href of validHrefs) {
+          const rm = href.match(/\/reel\/(\d+)/);
+          if (rm?.[1]) {
+            resolvedId = rm[1];
+            resolvedUrl = `https://www.facebook.com/reel/${rm[1]}/`;
+            break;
+          }
+        }
+        if (!resolvedId) {
+          const rm = containerHtml.match(/\/reel\/(\d+)/);
+          if (rm?.[1]) {
+            resolvedId = rm[1];
+            resolvedUrl = `https://www.facebook.com/reel/${rm[1]}/`;
+          }
+        }
+      }
+
+      // Marketplace cross-posts: /commerce/listing/<id>/ (stable id;
+      // strip media_id query so photo variants share one postUrl).
+      if (!resolvedId) {
+        for (const href of validHrefs) {
+          const cm = href.match(/\/commerce\/listing\/(\d+)/);
+          if (cm?.[1]) {
+            resolvedId = cm[1];
+            resolvedUrl = `https://www.facebook.com/commerce/listing/${cm[1]}/`;
+            break;
+          }
+        }
+        if (!resolvedId) {
+          const cm = containerHtml.match(/\/commerce\/listing\/(\d+)/);
+          if (cm?.[1]) {
+            resolvedId = cm[1];
+            resolvedUrl = `https://www.facebook.com/commerce/listing/${cm[1]}/`;
+          }
+        }
+      }
+
+      // Stories: /stories/<uid>/<token>/, token decodes to S:_I_C:<fbid>.
+      if (!resolvedId) {
+        const storySources = [...validHrefs];
+        const shm = containerHtml.match(/\/stories\/(\d+)\/[^/?#\s"']+/);
+        if (shm?.[0]) storySources.push(shm[0]);
+        for (const href of storySources) {
+          const sm = href.match(/\/stories\/(\d+)\/([^/?#]+)/);
+          if (!sm) continue;
+          const suid = sm[1];
+          let stoken = sm[2];
+          try {
+            stoken = decodeURIComponent(stoken);
+          } catch {
+            // keep raw token
+          }
+          const sraw = href.split("?")[0];
+          const sabs = sraw.startsWith("http")
+            ? sraw
+            : `https://www.facebook.com${sraw.startsWith("/") ? "" : "/"}${sraw}`;
+          let sinner: string | null = null;
+          try {
+            const sdec = atob(stoken.replace(/-/g, "+").replace(/_/g, "/"));
+            const sdm = sdec.match(/(\d{6,})/);
+            if (sdm?.[1]) sinner = sdm[1];
+          } catch {
+            sinner = null;
+          }
+          if (sinner) {
+            resolvedId = sinner;
+            resolvedUrl = sabs;
+            break;
+          }
+          let shash = 0;
+          for (let i = 0; i < stoken.length; i++) {
+            shash = (shash << 5) - shash + stoken.charCodeAt(i);
+            shash |= 0;
+          }
+          resolvedId = `st_${suid}_${Math.abs(shash).toString(36)}`;
+          resolvedUrl = sabs;
+          break;
+        }
+      }
+
+      // Watch: /watch/?v=<id>
+      if (!resolvedId) {
+        for (const href of validHrefs) {
+          const wm = href.match(/\/watch\/?\?(?:[^#]*?&)?v=(\d+)/);
+          if (wm?.[1]) {
+            resolvedId = wm[1];
+            resolvedUrl = `https://www.facebook.com/watch/?v=${wm[1]}`;
+            break;
+          }
+        }
+      }
+
+      // Opaque share links: /share/r|v|p/<token>/ (token is per-post stable).
+      if (!resolvedId) {
+        for (const href of validHrefs) {
+          const shm2 = href.match(/\/share\/([rvp])\/([A-Za-z0-9_-]+)/);
+          if (shm2?.[1] && shm2?.[2]) {
+            resolvedId = `sh_${shm2[2]}`;
+            resolvedUrl = `https://www.facebook.com/share/${shm2[1]}/${shm2[2]}/`;
+            break;
+          }
+        }
+      }
+
+      const postId = resolvedId || fallbackId;
+      const postUrl = resolvedUrl;
 
       seenTexts.add(postText);
-
-      // ----------------------------------------------------------
-      // Author
-      // ----------------------------------------------------------
 
       let author = "Anonymous participant";
 
@@ -186,10 +264,6 @@ export const extractFacebookPosts = async (
         }
       }
 
-      // ----------------------------------------------------------
-      // Images
-      // ----------------------------------------------------------
-
       const images = Array.from(
         postContainer.querySelectorAll<HTMLImageElement>('img[src*="fbcdn"]'),
       )
@@ -197,10 +271,6 @@ export const extractFacebookPosts = async (
         .filter(
           (src) => !src.includes("/rsrc.php/") && !src.includes("/emoji.php/"),
         );
-
-      // ----------------------------------------------------------
-      // Normalized FacebookPost
-      // ----------------------------------------------------------
 
       extracted.push({
         platform: "facebook",
@@ -214,173 +284,15 @@ export const extractFacebookPosts = async (
       });
     });
 
-    // ------------------------------------------------------------
-    // FALLBACK: role="article"
-    // ------------------------------------------------------------
-
-    if (extracted.length === 0) {
-      const articleNodes = Array.from(
-        document.querySelectorAll<HTMLDivElement>('div[role="article"]'),
-      );
-
-      articleNodes.forEach((node) => {
-        const parentArticle = node.parentElement
-          ? node.parentElement.closest('div[role="article"]')
-          : null;
-
-        if (parentArticle !== null) {
-          return;
-        }
-
-        const textElements = Array.from(
-          node.querySelectorAll<HTMLDivElement>('div[dir="auto"]'),
-        );
-
-        let postText = "";
-        let longestLen = 0;
-
-        textElements.forEach((el) => {
-          const text = el.innerText ? el.innerText.trim() : "";
-
-          if (
-            text.length > longestLen &&
-            !text.includes("Join group") &&
-            !text.includes("Members") &&
-            !text.includes("Like") &&
-            !text.includes("Comment")
-          ) {
-            postText = text;
-            longestLen = text.length;
-          }
-        });
-
-        if (!postText || postText.length < 30) {
-          return;
-        }
-
-        postText = postText
-          .replace(
-            /\s*(?:…|\.\.\.)?\s*(See more|See More|See less|See Less|आणखी पहा|और देखें|कमी दाखवा|कम दिखाएं)$/gi,
-            "",
-          )
-          .trim();
-
-        if (!postText || seenTexts.has(postText)) {
-          return;
-        }
-
-        // ----------------------------------------------------------
-        // Author
-        // ----------------------------------------------------------
-
-        let author = "Anonymous participant";
-
-        const authorEl = node.querySelector<HTMLElement>(
-          "h2 strong a, " +
-            "h3 strong a, " +
-            'a[role="link"] strong, ' +
-            'a[role="link"] span',
-        );
-
-        if (authorEl) {
-          author = authorEl.innerText.trim().split("\n")[0];
-        }
-
-        // ----------------------------------------------------------
-        // URL + ID
-        // ----------------------------------------------------------
-
-        let postIdFound: string | null = null;
-        const anchors = Array.from(node.querySelectorAll<HTMLAnchorElement>("a"));
-        const validHrefs = anchors
-          .map((a) => a.href)
-          .filter(
-            (href) =>
-              Boolean(href) &&
-              !href.includes("/emoji.php") &&
-              !href.includes("/rsrc.php") &&
-              !href.includes("/user/") &&
-              !href.includes("profile.php") &&
-              !href.includes("/profile/"),
-          );
-
-        for (const href of validHrefs) {
-          const postMatch = href.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
-          if (postMatch?.[1]) {
-            postIdFound = postMatch[1];
-            break;
-          }
-          const setMatch = href.match(/set=(?:pcb|gm|a)\.(\d+)/);
-          if (setMatch?.[1]) {
-            postIdFound = setMatch[1];
-            break;
-          }
-          const storyMatch = href.match(/(?:story_fbid|fbid)=(\d+)/);
-          if (storyMatch?.[1]) {
-            postIdFound = storyMatch[1];
-            break;
-          }
-        }
-
-        if (!postIdFound) {
-          const html = node.outerHTML || "";
-          const postMatch = html.match(/\/(?:posts|permalink|multi_permalink)\/(\d+)/);
-          if (postMatch?.[1]) {
-            postIdFound = postMatch[1];
-          } else {
-            const setMatch = html.match(/set=(?:pcb|gm|a)\.(\d+)/);
-            if (setMatch?.[1]) {
-              postIdFound = setMatch[1];
-            } else {
-              const storyMatch = html.match(/(?:story_fbid|fbid)=(\d+)/);
-              if (storyMatch?.[1]) {
-                postIdFound = storyMatch[1];
-              }
-            }
-          }
-        }
-
-        let hash = 0;
-        const textToHash = postText.slice(0, 100);
-        for (let i = 0; i < textToHash.length; i++) {
-          hash = (hash << 5) - hash + textToHash.charCodeAt(i);
-          hash |= 0;
-        }
-        const fallbackId = "fb_" + Math.abs(hash).toString(36);
-
-        const postId = postIdFound || fallbackId;
-        const postUrl = postIdFound
-          ? `https://www.facebook.com/groups/${groupId}/posts/${postIdFound}`
-          : "";
-
-        // ----------------------------------------------------------
-        // Images
-        // ----------------------------------------------------------
-
-        const images = Array.from(
-          node.querySelectorAll<HTMLImageElement>('img[src*="fbcdn"]'),
-        )
-          .map((img) => img.src)
-          .filter(
-            (src) =>
-              !src.includes("/rsrc.php/") && !src.includes("/emoji.php/"),
-          );
-
-        seenTexts.add(postText);
-
-        extracted.push({
-          platform: "facebook",
-          postId,
-          author,
-          content: postText,
-          timestamp: new Date().toISOString(),
-          postUrl,
-          imageUrls: images.length > 0 ? images : undefined,
-          groupId,
-        });
-      });
-    }
-
     return extracted;
   }, groupId);
+
+  if (posts.length === 0) {
+    console.warn(
+      `extractFacebookPosts: no posts for group ${groupId} — ` +
+        "selectors may be stale (fallback path was removed).",
+    );
+  }
+
+  return posts;
 };

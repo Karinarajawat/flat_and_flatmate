@@ -8,3 +8,5 @@ node_modules
 opencode.json
 
 facebook_cookies.json
+
+tmp/

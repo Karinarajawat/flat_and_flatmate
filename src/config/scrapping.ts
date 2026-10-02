@@ -4,8 +4,12 @@ dotenv.config();
 import {
   RAW_DATA_DIR,
   FACEBOOK_DEFAULT_PAGES_TO_SCROLL,
+  FACEBOOK_INTER_GROUP_DELAY_MAX_MS,
+  FACEBOOK_INTER_GROUP_DELAY_MIN_MS,
   REDDIT_DEFAULT_FETCH_LIMIT,
   REDDIT_DEFAULT_MAX_POSTS,
+  REDDIT_INTER_SUBREDDIT_DELAY_MAX_MS,
+  REDDIT_INTER_SUBREDDIT_DELAY_MIN_MS,
   REDDIT_MAX_RETRIES,
   REDDIT_RATE_LIMIT_BUFFER_SECONDS,
   REDDIT_RATE_LIMIT_THRESHOLD,
@@ -31,6 +35,13 @@ export const config = {
     maxRetries: REDDIT_MAX_RETRIES,
     retryDelayMs: REDDIT_RETRY_DELAY_MS,
 
+    interSubredditDelayMinMs: Number(
+      process.env.REDDIT_INTER_SUBREDDIT_DELAY_MIN_MS ?? "",
+    ) || REDDIT_INTER_SUBREDDIT_DELAY_MIN_MS,
+    interSubredditDelayMaxMs: Number(
+      process.env.REDDIT_INTER_SUBREDDIT_DELAY_MAX_MS ?? "",
+    ) || REDDIT_INTER_SUBREDDIT_DELAY_MAX_MS,
+
     cookie: process.env.REDDIT_COOKIE ?? "",
   },
 
@@ -38,6 +49,13 @@ export const config = {
     groups: TARGET_FACEBOOK_GROUPS,
 
     pagesToScroll: FACEBOOK_DEFAULT_PAGES_TO_SCROLL,
+
+    interGroupDelayMinMs: Number(
+      process.env.FB_INTER_GROUP_DELAY_MIN_MS ?? "",
+    ) || FACEBOOK_INTER_GROUP_DELAY_MIN_MS,
+    interGroupDelayMaxMs: Number(
+      process.env.FB_INTER_GROUP_DELAY_MAX_MS ?? "",
+    ) || FACEBOOK_INTER_GROUP_DELAY_MAX_MS,
 
     cookiesPath: process.env.FACEBOOK_COOKIES_PATH ?? "facebook_cookies.json",
   },

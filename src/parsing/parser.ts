@@ -41,7 +41,7 @@ export const parsePost = async (
       };
     }
   } else {
-    listingType = getListingType(post);
+    listingType = getListingType(post).type;
 
     if (listingType !== "offering_room") {
       logger.debug(`[${post.postId}] Skipped: ${listingType}`);
@@ -86,19 +86,21 @@ export const parsePost = async (
       };
     }
 
-    const { data, lister } = geminiResponse;
+    const { data } = geminiResponse;
 
-    logger.debug(`[${post.postId}] Geocoding: ${data.locality}, ${data.city}`);
+    logger.debug(
+      `[${post.postId}] Geocoding: ${data.property.locality}, ${data.property.city}`,
+    );
 
     const coordinates = await resolveCoordinates({
-      address: data.address,
-      locality: data.locality,
-      city: data.city,
+      address: data.property.address,
+      locality: data.property.locality,
+      city: data.property.city,
     });
 
     if (!coordinates) {
       throw new Error(
-        `Could not geocode listing: ${data.locality}, ${data.city}`,
+        `Could not geocode listing: ${data.property.locality}, ${data.property.city}`,
       );
     }
 
@@ -107,29 +109,55 @@ export const parsePost = async (
     );
 
     const listing: Listing = {
-      data: {
-        ...data,
+      images: post.imageUrls ?? [],
+
+      cover_image: post.imageUrls?.length ? post.imageUrls[0] : undefined,
+
+      status: LISTING_STATUSES[0],
+
+      property: {
+        ...data.property,
+        attached_washroom: data.property.attached_washroom ?? false,
 
         location: {
           type: "Point",
           coordinates: [coordinates.longitude, coordinates.latitude],
         },
-
-        images: post.imageUrls ?? [],
-
-        cover_image: post.imageUrls?.length ? post.imageUrls[0] : undefined,
-
-        status: LISTING_STATUSES[0],
       },
+
+      rental_scope: data.rental_scope,
+
+      pricing: data.pricing,
+
+      availability: {
+        ...data.availability,
+        available_from: data.availability.available_from
+          ? new Date(data.availability.available_from)
+          : undefined,
+      },
+
+      preferences: data.preferences,
+
+      services: data.services ?? [],
+      add_ons: data.add_ons ?? [],
+      amenities: data.amenities ?? [],
+      house_rules: data.house_rules ?? [],
+      nearby_places: (data.nearby_places ?? []).map((place) => ({
+        ...place,
+        distance: 0,
+      })),
+
+      views: 0,
+      favorites: 0,
 
       external_listing: {
         source: post.platform,
         url: post.postUrl,
-        lister,
+        author: post.author,
       },
 
-      views: 0,
-      favorites: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     return {

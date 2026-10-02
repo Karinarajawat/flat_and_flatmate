@@ -147,6 +147,33 @@ export const scrollFacebookPage = async (page: Page): Promise<void> => {
   await page.waitForTimeout(4_000);
 };
 
+// Final revisit pass: walk the whole feed top-to-bottom in viewport steps
+// so FB renders each post's full chrome (timestamp/permalink anchors,
+// images). NOTE: no named functions/const-arrow helpers in here — esbuild
+// keepNames breaks page.evaluate serialization (see extractor.ts).
+export const revisitFacebookFeed = async (page: Page): Promise<void> => {
+  await page.evaluate(async () => {
+    window.scrollTo(0, 0);
+    await new Promise((r) => setTimeout(r, 800));
+
+    const step = window.innerHeight;
+
+    for (let i = 0; i < 200; i++) {
+      window.scrollBy(0, step);
+      await new Promise((r) => setTimeout(r, 250));
+
+      if (
+        window.innerHeight + window.scrollY >=
+        document.body.scrollHeight - 200
+      ) {
+        break;
+      }
+    }
+  });
+
+  await page.waitForTimeout(2_000);
+};
+
 export const expandSeeMore = async (page: Page): Promise<void> => {
   try {
     // 1. Expand via fast in-page DOM clicks across all matching role="button" and text nodes
@@ -173,41 +200,6 @@ export const expandSeeMore = async (page: Page): Promise<void> => {
     });
 
     await page.waitForTimeout(1_000);
-  } catch {
-    // Non-fatal.
-  }
-};
-
-export const hydrateFacebookPostLinks = async (page: Page): Promise<void> => {
-  try {
-    // Find all post timestamp anchors in viewport and hover them to trigger dynamic URL hydration
-    const boxes = await page.evaluate(() => {
-      const anchors = Array.from(
-        document.querySelectorAll<HTMLAnchorElement>(
-          'a[href*="__tn__=%2CO%2CP-R"], a[href*="__tn__=%2CmH-R"], a[href*="__tn__=-R"]',
-        ),
-      );
-
-      return anchors.map((a) => {
-        const rect = a.getBoundingClientRect();
-        return {
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-          visible:
-            rect.width > 0 &&
-            rect.height > 0 &&
-            rect.top >= -150 &&
-            rect.bottom <= window.innerHeight + 150,
-        };
-      });
-    });
-
-    for (const box of boxes) {
-      if (box.visible) {
-        await page.mouse.move(box.x, box.y);
-        await page.waitForTimeout(60);
-      }
-    }
   } catch {
     // Non-fatal.
   }

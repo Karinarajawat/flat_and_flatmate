@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
 
 import { ListingModel } from "@/types/listing.model";
+import { LocalityModel } from "@/types/localities.model";
 import { Listing } from "@/types/listing";
 import { ListingStatus } from "@/config/model";
-import { toErrorMessage } from "@/utils";
+import { resolveCoordinates } from "@/service/geocoder";
+import { toErrorMessage } from "@/utils/utils";
 import { logger } from "@/utils/logger";
 
 export type InsertResult = "inserted" | "skipped" | "failed";
@@ -46,12 +48,14 @@ export async function markListingStatus(
         "external_listing.source": source,
         "external_listing.url": url,
       } as never,
-      { $set: { "data.status": status } },
+      { $set: { status } },
     );
 
     return result.modifiedCount > 0;
   } catch (error) {
-    logger.error(`Failed to mark ${url} as ${status}: ${toErrorMessage(error)}`);
+    logger.error(
+      `Failed to mark ${url} as ${status}: ${toErrorMessage(error)}`,
+    );
     return false;
   }
 }
@@ -70,17 +74,17 @@ export async function insertListing(listing: Listing): Promise<InsertResult> {
   }
 
   // Layer 2: Field + author dedup (same-platform only)
-  const locality = listing.data?.locality;
+  const locality = listing.property?.locality;
   if (locality) {
     const fieldMatch = await ListingModel.exists({
       "external_listing.source": source,
-      "data.rent": listing.data?.rent,
-      "data.bhk": listing.data?.bhk,
-      "data.gender_preference": listing.data?.gender_preference,
-      "external_listing.lister.name": listing.external_listing?.lister?.name,
+      "pricing.rent": listing.pricing?.rent,
+      "property.bhk": listing.property?.bhk,
+      "preferences.gender": listing.preferences?.gender,
+      "external_listing.author": listing.external_listing?.author,
       $or: [
-        { "data.locality": locality },
-        { "data.locality": { $regex: locality, $options: "i" } },
+        { "property.locality": locality },
+        { "property.locality": { $regex: locality, $options: "i" } },
       ],
     } as never);
 
@@ -89,21 +93,25 @@ export async function insertListing(listing: Listing): Promise<InsertResult> {
     }
   }
 
+  // Locality check-or-create (blocking): reuse case-insensitive lookup,
+  // otherwise geocode fresh and insert. Failure blocks the listing.
+  const localityOk = await ensureLocality(listing);
+  if (!localityOk) {
+    logger.error(
+      `Failed to ensure locality ${listing.property?.locality}, ${listing.property?.city}: blocking insert`,
+    );
+    return "failed";
+  }
+
   const document = {
-    data: {
-      ...listing.data,
-      images: listing.data?.images ?? [],
-      status: listing.data?.status ?? "active",
-      available_from: listing.data?.available_from
-        ? new Date(listing.data.available_from as unknown as string)
+    ...listing,
+    images: listing.images ?? [],
+    status: listing.status ?? "active",
+    availability: {
+      ...listing.availability,
+      available_from: listing.availability?.available_from
+        ? new Date(listing.availability.available_from as unknown as string)
         : undefined,
-    },
-    external_listing: {
-      ...listing.external_listing,
-      lister: {
-        ...listing.external_listing!.lister,
-        life_style: listing.external_listing!.lister.life_style ?? [],
-      },
     },
     views: listing.views ?? 0,
     favorites: listing.favorites ?? 0,
@@ -118,5 +126,73 @@ export async function insertListing(listing: Listing): Promise<InsertResult> {
       return "skipped";
     }
     return "failed";
+  }
+}
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Ensure the listing's locality exists in the Locality collection.
+ * Case-insensitive match on {name, city}; on miss, geocode fresh via
+ * Nominatim and create the entry. Returns true when the locality is
+ * present (or newly created / raced), false when blocking the insert.
+ */
+async function ensureLocality(listing: Listing): Promise<boolean> {
+  const name = listing.property?.locality?.trim();
+  const city = listing.property?.city?.trim();
+
+  if (!name || !city) {
+    return false;
+  }
+
+  try {
+    const existing = await LocalityModel.exists({
+      city: city.toLowerCase(),
+      name: { $regex: `^${escapeRegExp(name)}$`, $options: "i" },
+    } as never);
+
+    if (existing) {
+      return true;
+    }
+
+    const coordinates = await resolveCoordinates({
+      address: listing.property?.address,
+      locality: name,
+      city,
+    });
+
+    if (!coordinates) {
+      logger.error(`Geocode failed for locality ${name}, ${city}`);
+      return false;
+    }
+
+    try {
+      await LocalityModel.create({
+        name,
+        city: city.toLowerCase(),
+        location: {
+          type: "Point",
+          coordinates: [coordinates.longitude, coordinates.latitude],
+        },
+      });
+    } catch (error) {
+      const message = toErrorMessage(error);
+      // Race: another worker created it between lookup and create.
+      if (message.includes("E11000") || message.includes("duplicate key")) {
+        return true;
+      }
+      logger.error(
+        `Failed to create locality ${name}, ${city}: ${message}`,
+      );
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logger.error(
+      `Failed to ensure locality ${name}, ${city}: ${toErrorMessage(error)}`,
+    );
+    return false;
   }
 }

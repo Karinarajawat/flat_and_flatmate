@@ -1,19 +1,46 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { FacebookPost } from "@/types/post";
-import type { BrowserContext } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 
 import { config } from "@/config/scrapping";
 
 import {
-  createFacebookBrowser,
   expandSeeMore,
-  hydrateFacebookPostLinks,
   navigateToFacebookGroup,
+  revisitFacebookFeed,
   scrollFacebookPage,
 } from "./browser";
 
 import { extractFacebookPosts } from "./extractor";
+import { createMergeState, mergePost, type PostMergeState } from "./merge";
+
+interface FeedPassResult {
+  visible: number;
+  added: number;
+  updated: number;
+}
+
+// One expand + extract + merge cycle, shared by the scroll loop and the
+// revisit pass so the two can't drift apart.
+export const runFeedPass = async (
+  page: Page,
+  groupId: string,
+  mergeState: PostMergeState,
+): Promise<FeedPassResult> => {
+  await expandSeeMore(page);
+
+  const postsNow = await extractFacebookPosts(page, groupId);
+
+  let added = 0;
+  let updated = 0;
+
+  for (const post of postsNow) {
+    const outcome = mergePost(mergeState, post);
+    if (outcome === "new") added++;
+    else if (outcome === "updated") updated++;
+  }
+
+  return { visible: postsNow.length, added, updated };
+};
 
 export const scrapeGroup = async (
   context: BrowserContext,
@@ -24,97 +51,45 @@ export const scrapeGroup = async (
   try {
     console.log(`\nScraping Facebook group: ${groupId}`);
 
-    const loaded = await navigateToFacebookGroup(page, groupId);
-
-    if (!loaded) {
+    if (!(await navigateToFacebookGroup(page, groupId))) {
       console.error(
-        `Failed to load Facebook group ${groupId}. ` +
-          "Cookies may be expired.",
+        `Failed to load Facebook group ${groupId}. Cookies may be expired.`,
       );
-
       return [];
     }
 
     console.log(
-      `Successfully loaded group page. ` +
-        `Scrolling + extracting incrementally ` +
+      `Loaded group page. Scrolling + extracting ` +
         `(${config.facebook.pagesToScroll} passes)...`,
     );
 
-    const seenPostIds = new Set<string>();
-    const groupPosts: FacebookPost[] = [];
+    const mergeState = createMergeState();
 
     for (let scroll = 0; scroll < config.facebook.pagesToScroll; scroll++) {
-      console.log(`Scroll ${scroll + 1}/` + `${config.facebook.pagesToScroll}`);
-
-      // ----------------------------------------------------------
-      // Scroll
-      // ----------------------------------------------------------
-
       await scrollFacebookPage(page);
 
-      // ----------------------------------------------------------
-      // Expand "See more"
-      // ----------------------------------------------------------
-
-      await expandSeeMore(page);
-
-      // ----------------------------------------------------------
-      // Hydrate post links
-      // ----------------------------------------------------------
-
-      await hydrateFacebookPostLinks(page);
-
-      // ----------------------------------------------------------
-      // Extract currently visible posts
-      // ----------------------------------------------------------
-
-      const postsNow = await extractFacebookPosts(page, groupId);
-
-      let newCount = 0;
-
-      for (const post of postsNow) {
-        if (seenPostIds.has(post.postId)) {
-          continue;
-        }
-
-        seenPostIds.add(post.postId);
-        groupPosts.push(post);
-        newCount++;
-      }
+      const pass = await runFeedPass(page, groupId, mergeState);
 
       console.log(
-        `  -> ${postsNow.length} posts visible, ` +
-          `${newCount} new ` +
-          `(total so far: ${groupPosts.length})`,
+        `Scroll ${scroll + 1}/${config.facebook.pagesToScroll} -> ` +
+          `${pass.visible} visible, ${pass.added} new ` +
+          `(total: ${mergeState.posts.length})`,
       );
     }
 
+    // Revisit pass: re-render full post chrome, backfill resolved URLs.
+    await revisitFacebookFeed(page);
+
+    const revisit = await runFeedPass(page, groupId, mergeState);
+
     console.log(
-      `Successfully scraped ${groupPosts.length} ` +
-        `unique posts for group ${groupId}.`,
+      `Revisit -> ${revisit.visible} visible, ` +
+        `${revisit.added} new, ${revisit.updated} updated ` +
+        `(total: ${mergeState.posts.length})`,
     );
 
-    return groupPosts;
+    return mergeState.posts;
   } finally {
     await page.close();
-  }
-};
-
-export const scrapeFacebook = async (): Promise<FacebookPost[]> => {
-  const { browser, context } = await createFacebookBrowser();
-
-  try {
-    const allPosts: FacebookPost[] = [];
-
-    for (const groupId of config.facebook.groups) {
-      const groupPosts = await scrapeGroup(context, groupId);
-
-      allPosts.push(...groupPosts);
-    }
-
-    return allPosts;
-  } finally {
-    await browser.close();
   }
 };

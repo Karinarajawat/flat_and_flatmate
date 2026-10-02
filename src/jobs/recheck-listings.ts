@@ -9,7 +9,7 @@ import {
 } from "@/storage/mongo";
 import { ListingModel } from "@/types/listing.model";
 import { logger } from "@/utils/logger";
-import { toErrorMessage } from "@/utils";
+import { toErrorMessage } from "@/utils/utils";
 
 const main = async () => {
   await connectMongo();
@@ -17,7 +17,7 @@ const main = async () => {
   try {
     const listings = await ListingModel.find({
       "external_listing.source": "reddit",
-      "data.status": "active",
+      status: "active",
     }).lean();
 
     console.log(`Found ${listings.length} active Reddit listings to recheck\n`);
@@ -34,7 +34,7 @@ const main = async () => {
 
     for (const listing of listings) {
       const url = listing.external_listing?.url;
-      const listerName = listing.external_listing?.lister?.name;
+      const listerName = listing.external_listing?.author ?? undefined;
 
       if (!url) {
         stats.errors++;

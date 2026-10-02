@@ -1,6 +1,6 @@
 import https from "https";
 import { logger } from "@/utils/logger";
-import { sleep } from "@/utils";
+import { sleep } from "@/utils/utils";
 
 const cache = new Map<string, { latitude: number; longitude: number } | null>();
 

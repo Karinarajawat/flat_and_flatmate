@@ -12,7 +12,7 @@ import { RawPost } from "@/types/post";
 import { buildPrompt } from "@/config/prompts";
 import { config } from "@/config/parsing";
 import { logger } from "@/utils/logger";
-import { sleep } from "@/utils";
+import { sleep } from "@/utils/utils";
 
 export async function parseWithGemini(
   post: RawPost,
@@ -23,7 +23,9 @@ export async function parseWithGemini(
 
   const prompt = buildPrompt(post);
 
-  logger.debug(`[${post.postId}] Sending prompt to Gemini (${prompt.length} chars)`);
+  logger.debug(
+    `[${post.postId}] Sending prompt to Gemini (${prompt.length} chars)`,
+  );
 
   const requestBody = {
     contents: [
@@ -40,7 +42,9 @@ export async function parseWithGemini(
   const rawResponse = await makeGeminiRequest(requestBody);
   const parsed = JSON.parse(rawResponse);
 
-  logger.debug(`[${post.postId}] Gemini response: ${rawResponse.slice(0, 200)}`);
+  logger.debug(
+    `[${post.postId}] Gemini response: ${rawResponse.slice(0, 200)}`,
+  );
 
   const result = GeminiListingResponseZodSchema.safeParse(parsed);
 
@@ -56,7 +60,9 @@ export async function parseWithGemini(
     };
   }
 
-  logger.debug(`[${post.postId}] Gemini: skip=false, rent=${result.data.data.rent}, locality=${result.data.data.locality}`);
+  logger.debug(
+    `[${post.postId}] Gemini: skip=false, rent=${result.data.data.pricing.rent}, locality=${result.data.data.property.locality}`,
+  );
 
   return normalizeGeminiResponse(result.data, post);
 }
@@ -67,33 +73,32 @@ function normalizeGeminiResponse(
 ): GeminiListingResponse {
   const data: ListingDataFromGemeni = {
     ...result.data,
-    available_from: undefined,
+    availability: { ...result.data.availability },
   };
 
   const now = new Date();
 
-  if (result.data.available_from) {
-    const parsedDate = new Date(result.data.available_from);
+  const rawAvailableFrom = result.data.availability?.available_from;
+
+  if (rawAvailableFrom) {
+    const parsedDate = new Date(rawAvailableFrom);
 
     if (Number.isNaN(parsedDate.getTime())) {
-      delete data.available_from;
-      data.available_immediately = data.available_immediately ?? true;
+      delete data.availability.available_from;
+      data.availability.available_immediately =
+        data.availability.available_immediately ?? true;
     } else {
-      data.available_from = parsedDate;
-      data.available_immediately = parsedDate <= now;
+      data.availability.available_from = parsedDate;
+      data.availability.available_immediately = parsedDate <= now;
     }
   } else {
-    data.available_immediately = true;
+    data.availability.available_immediately =
+      data.availability.available_immediately ?? true;
   }
 
   return {
     skip: false,
     data,
-    lister: {
-      ...result.lister,
-      name: result.lister?.name || post.author,
-      life_style: result.lister?.life_style ?? [],
-    },
   };
 }
 

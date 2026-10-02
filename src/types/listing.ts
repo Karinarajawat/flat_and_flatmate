@@ -1,102 +1,283 @@
+import { z } from "zod";
+
 import {
+  ADD_ON_TYPES,
   AddOnType,
+  AMENITY_TYPES,
   AmenityType,
+  BHK_TYPES,
   BhkType,
+  CITIES,
   City,
+  FURNISHED_STATUSES,
   FurnishedStatus,
+  GENDER_PREFERENCES,
   GenderPreference,
+  HOUSE_RULE_TYPES,
   HouseRuleType,
+  LISTING_SOURCES,
+  LISTING_STATUSES,
   ListingSource,
   ListingStatus,
-  NeighborhoodType,
-  OccupancyType,
-  ADD_ON_TYPES,
-  AMENITY_TYPES,
-  BHK_TYPES,
-  CITIES,
-  FURNISHED_STATUSES,
-  GENDER_PREFERENCES,
-  HOUSE_RULE_TYPES,
   NEIGHBORHOOD_TYPES,
-  OCCUPANCY_TYPES,
+  NeighborhoodType,
+  SERVICES_TYPES,
+  ServiceType,
 } from "@/config/model";
-import { z } from "zod";
+
+/* -------------------------------------------------------------------------- */
+/* Location                                                                   */
+/* -------------------------------------------------------------------------- */
 
 export type Location = {
   type: "Point";
-  coordinates: [number, number];
+  coordinates: [number, number]; // [longitude, latitude]
 };
+
+export const locationSchema = z.object({
+  type: z.literal("Point"),
+  coordinates: z.tuple([z.number(), z.number()]),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Property                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type Property = {
+  bhk: BhkType;
+  attached_washroom: boolean;
+  carpet_area?: number;
+  furnished_status: FurnishedStatus;
+  floor?: number;
+  city: City;
+  locality: string;
+  address: string;
+  location: Location;
+};
+
+export const propertySchema = z.object({
+  bhk: z.enum(BHK_TYPES),
+  attached_washroom: z.boolean(),
+  carpet_area: z.number().min(0).optional(),
+  furnished_status: z.enum(FURNISHED_STATUSES),
+  floor: z.number().min(0).optional(),
+  city: z.enum(CITIES),
+  locality: z.string(),
+  address: z.string(),
+  location: locationSchema,
+});
+
+/* -------------------------------------------------------------------------- */
+/* Rental Scope                                                               */
+/* -------------------------------------------------------------------------- */
+
+export type RentalScope = {
+  type: "room" | "hall";
+  capacity: number;
+  total_occupancy: number;
+};
+
+export const rentalScopeSchema = z.object({
+  type: z.enum(["room", "hall"]),
+  capacity: z.number().min(1),
+  total_occupancy: z.number().min(1),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Pricing                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type Pricing = {
+  rent: number;
+  deposit?: number;
+  brokerage?: number;
+  setup_cost?: number;
+  move_in_charges?: number;
+};
+
+export const pricingSchema = z.object({
+  rent: z.number().min(0),
+  deposit: z.number().min(0).optional(),
+  brokerage: z.number().min(0).optional(),
+  setup_cost: z.number().min(0).optional(),
+  move_in_charges: z.number().min(0).optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Availability                                                               */
+/* -------------------------------------------------------------------------- */
+
+export type Availability = {
+  available_from?: Date;
+  available_immediately: boolean;
+};
+
+export const availabilitySchema = z.object({
+  available_from: z.coerce.date().optional(),
+  available_immediately: z.boolean(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Preferences                                                                */
+/* -------------------------------------------------------------------------- */
+
+export type Preferences = {
+  gender?: GenderPreference;
+};
+
+export const preferencesSchema = z.object({
+  gender: z.enum(GENDER_PREFERENCES).optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Add Ons                                                                    */
+/* -------------------------------------------------------------------------- */
 
 export type AddOn = {
   type: AddOnType;
   desc?: string;
 };
 
+export const addOnSchema = z.object({
+  type: z.enum(ADD_ON_TYPES),
+  desc: z.string().optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Amenities                                                                  */
+/* -------------------------------------------------------------------------- */
+
 export type Amenity = {
   type: AmenityType;
   desc?: string;
 };
+
+export const amenitySchema = z.object({
+  type: z.enum(AMENITY_TYPES),
+  desc: z.string().optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* House Rules                                                                */
+/* -------------------------------------------------------------------------- */
 
 export type HouseRule = {
   type: HouseRuleType;
   desc?: string;
 };
 
-export type Neighborhood = {
+export const houseRuleSchema = z.object({
+  type: z.enum(HOUSE_RULE_TYPES),
+  desc: z.string().optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Services                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type Service = {
+  type: ServiceType;
+  desc?: string;
+  price?: number;
+  included?: boolean;
+};
+
+export const serviceSchema = z.object({
+  type: z.enum(SERVICES_TYPES),
+  desc: z.string().optional(),
+  price: z.number().min(0).optional(),
+  included: z.boolean().optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Nearby Places                                                              */
+/* -------------------------------------------------------------------------- */
+
+export type NearbyPlace = {
   type: NeighborhoodType;
+  name: string;
   distance: number;
 };
 
-export type ExternalLister = {
-  name: string;
-  age?: number;
-  profile_pic?: string;
-  contact_number?: string;
-  life_style: string[];
-};
+export const nearbyPlaceSchema = z.object({
+  type: z.enum(NEIGHBORHOOD_TYPES),
+  name: z.string(),
+  distance: z.number().min(0),
+});
+
+/* -------------------------------------------------------------------------- */
+/* External Listing                                                           */
+/* -------------------------------------------------------------------------- */
 
 export type ExternalListing = {
   source: ListingSource;
   url: string;
-  lister: ExternalLister;
+  // Original post author for external listings.
+  // lister_id is reserved for internal listings and left unset here.
+  author: string;
 };
 
-export type ListingDataFromGemeni = {
-  title: string;
+export const externalListingSchema = z.object({
+  source: z.enum(LISTING_SOURCES),
+  url: z.string().url(),
+  author: z.string().min(1),
+});
 
-  carpet_area?: number;
-
-  city: City;
-  locality: string;
-  address: string;
-
-  gender_preference: GenderPreference;
-
-  bhk: BhkType;
-
-  occupancy: OccupancyType;
-
-  total_occupancy?: number;
-
-  furnished_status: FurnishedStatus;
-
-  floor?: number;
-
+/* -------------------------------------------------------------------------- */
+/* Gemini Listing                                                             */
+/* -------------------------------------------------------------------------- */
+export type GeminiListingData = {
+  property: Omit<Property, "location">;
+  rental_scope: RentalScope;
+  pricing: Pricing;
+  availability: Availability;
+  preferences?: Preferences;
+  services: Service[];
   add_ons: AddOn[];
   amenities: Amenity[];
   house_rules: HouseRule[];
-  neighborhood: Neighborhood[];
-
-  rent: number;
-
-  deposit?: number;
-  brokerage?: number;
-  setup_cost?: number;
-
-  available_from?: Date;
-
-  available_immediately: boolean;
+  nearby_places: Omit<NearbyPlace, "distance">[];
 };
+
+export const geminiListingDataSchema = z.object({
+  property: z.object({
+    bhk: z.enum(BHK_TYPES),
+    attached_washroom: z.boolean(),
+    carpet_area: z.number().min(0).optional(),
+    furnished_status: z.enum(FURNISHED_STATUSES),
+    floor: z.number().min(0).optional(),
+    city: z.enum(CITIES),
+    locality: z.string(),
+    address: z.string(),
+  }),
+
+  rental_scope: rentalScopeSchema,
+
+  pricing: pricingSchema,
+
+  availability: availabilitySchema,
+
+  preferences: preferencesSchema.optional(),
+
+  services: z.array(serviceSchema),
+
+  add_ons: z.array(addOnSchema),
+
+  amenities: z.array(amenitySchema),
+
+  house_rules: z.array(houseRuleSchema),
+
+  nearby_places: z.array(
+    z.object({
+      type: z.enum(NEIGHBORHOOD_TYPES),
+      name: z.string(),
+    }),
+  ),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Gemini Response                                                            */
+/* -------------------------------------------------------------------------- */
 
 export type GeminiListingResponse =
   | {
@@ -104,33 +285,24 @@ export type GeminiListingResponse =
     }
   | {
       skip: false;
-      data: ListingDataFromGemeni;
-      lister: {
-        name: string;
-        age?: number;
-        profile_pic?: string;
-        contact_number?: string;
-        life_style: string[];
-      };
+      data: GeminiListingData;
     };
 
-export type ListingData = ListingDataFromGemeni & {
-  location: Location;
+export const geminiListingResponseSchema = z.discriminatedUnion("skip", [
+  z.object({
+    skip: z.literal(true),
+  }),
 
-  images: string[];
-  cover_image?: string;
+  z.object({
+    skip: z.literal(false),
+    data: geminiListingDataSchema,
+  }),
+]);
 
-  status: ListingStatus;
-};
-
-export type Listing = {
-  data: ListingData;
-  external_listing?: ExternalListing;
-  lister_id?: string;
-
-  views: number;
-  favorites: number;
-};
+/* -------------------------------------------------------------------------- */
+/* Gemini API JSON Schema (plain object for generationConfig.responseSchema)  */
+/* Zod cannot be sent to the API, so this mirrors geminiListingDataSchema.   */
+/* -------------------------------------------------------------------------- */
 
 export const GeminiListingResponseSchema = {
   type: "object",
@@ -142,54 +314,86 @@ export const GeminiListingResponseSchema = {
     data: {
       type: "object",
       properties: {
-        title: {
-          type: "string",
+        property: {
+          type: "object",
+          properties: {
+            bhk: { type: "string", enum: [...BHK_TYPES] },
+            attached_washroom: { type: "boolean" },
+            carpet_area: { type: "number" },
+            furnished_status: {
+              type: "string",
+              enum: [...FURNISHED_STATUSES],
+            },
+            floor: { type: "number" },
+            city: { type: "string", enum: [...CITIES] },
+            locality: { type: "string", minLength: 1 },
+            address: { type: "string" },
+          },
+          required: [
+            "bhk",
+            "attached_washroom",
+            "furnished_status",
+            "city",
+            "locality",
+            "address",
+          ],
         },
 
-        carpet_area: {
-          type: "number",
+        rental_scope: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["room", "hall"] },
+            capacity: { type: "number" },
+            total_occupancy: { type: "number" },
+          },
+          required: ["type", "capacity", "total_occupancy"],
         },
 
-        city: {
-          type: "string",
-          enum: [...CITIES],
+        pricing: {
+          type: "object",
+          properties: {
+            rent: { type: "number" },
+            deposit: { type: "number" },
+            brokerage: { type: "number" },
+            setup_cost: { type: "number" },
+            move_in_charges: { type: "number" },
+          },
+          required: ["rent"],
         },
 
-        locality: {
-          type: "string",
-          minLength: 1,
+        availability: {
+          type: "object",
+          properties: {
+            available_from: {
+              type: "string",
+              description:
+                "ISO 8601 date string. Omit when the availability date is unknown.",
+            },
+            available_immediately: { type: "boolean" },
+          },
+          required: ["available_immediately"],
         },
 
-        address: {
-          type: "string",
+        preferences: {
+          type: "object",
+          properties: {
+            gender: { type: "string", enum: [...GENDER_PREFERENCES] },
+          },
+          required: [],
         },
 
-        gender_preference: {
-          type: "string",
-          enum: [...GENDER_PREFERENCES],
-        },
-
-        bhk: {
-          type: "string",
-          enum: [...BHK_TYPES],
-        },
-
-        occupancy: {
-          type: "string",
-          enum: [...OCCUPANCY_TYPES],
-        },
-
-        total_occupancy: {
-          type: "number",
-        },
-
-        furnished_status: {
-          type: "string",
-          enum: [...FURNISHED_STATUSES],
-        },
-
-        floor: {
-          type: "number",
+        services: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: [...SERVICES_TYPES] },
+              desc: { type: "string" },
+              price: { type: "number" },
+              included: { type: "boolean" },
+            },
+            required: ["type"],
+          },
         },
 
         add_ons: {
@@ -197,13 +401,8 @@ export const GeminiListingResponseSchema = {
           items: {
             type: "object",
             properties: {
-              type: {
-                type: "string",
-                enum: [...ADD_ON_TYPES],
-              },
-              desc: {
-                type: "string",
-              },
+              type: { type: "string", enum: [...ADD_ON_TYPES] },
+              desc: { type: "string" },
             },
             required: ["type"],
           },
@@ -214,13 +413,8 @@ export const GeminiListingResponseSchema = {
           items: {
             type: "object",
             properties: {
-              type: {
-                type: "string",
-                enum: [...AMENITY_TYPES],
-              },
-              desc: {
-                type: "string",
-              },
+              type: { type: "string", enum: [...AMENITY_TYPES] },
+              desc: { type: "string" },
             },
             required: ["type"],
           },
@@ -231,206 +425,107 @@ export const GeminiListingResponseSchema = {
           items: {
             type: "object",
             properties: {
-              type: {
-                type: "string",
-                enum: [...HOUSE_RULE_TYPES],
-              },
-              desc: {
-                type: "string",
-              },
+              type: { type: "string", enum: [...HOUSE_RULE_TYPES] },
+              desc: { type: "string" },
             },
             required: ["type"],
           },
         },
 
-        neighborhood: {
+        nearby_places: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              type: {
-                type: "string",
-                enum: [...NEIGHBORHOOD_TYPES],
-              },
-              distance: {
-                type: "number",
-              },
+              type: { type: "string", enum: [...NEIGHBORHOOD_TYPES] },
+              name: { type: "string" },
             },
-            required: ["type", "distance"],
+            required: ["type", "name"],
           },
         },
-
-        rent: {
-          type: "number",
-          minimum: 1,
-        },
-
-        deposit: {
-          type: "number",
-        },
-
-        brokerage: {
-          type: "number",
-        },
-
-        setup_cost: {
-          type: "number",
-        },
-
-        available_from: {
-          type: "string",
-          description:
-            "ISO 8601 date string. Omit when the availability date is unknown.",
-        },
-
-        available_immediately: {
-          type: "boolean",
-        },
       },
-
       required: [
-        "title",
-        "city",
-        "locality",
-        "address",
-        "gender_preference",
-        "bhk",
-        "occupancy",
-        "furnished_status",
+        "property",
+        "rental_scope",
+        "pricing",
+        "availability",
+        "services",
         "add_ons",
         "amenities",
         "house_rules",
-        "neighborhood",
-        "rent",
-        "available_immediately",
+        "nearby_places",
       ],
-    },
-
-    lister: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-        },
-
-        age: {
-          type: "number",
-        },
-
-        profile_pic: {
-          type: "string",
-        },
-
-        contact_number: {
-          type: "string",
-        },
-
-        life_style: {
-          type: "array",
-          items: {
-            type: "string",
-          },
-        },
-      },
-
-      required: [],
     },
   },
 
   required: ["skip"],
 } as const;
 
-export const GeminiListingResponseZodSchema = z.discriminatedUnion("skip", [
-  // Skipped listing
-  z.object({
-    skip: z.literal(true),
-  }),
+/* Backwards-compatible aliases for existing parser imports. */
+export const GeminiListingResponseZodSchema = geminiListingResponseSchema;
 
-  // Valid listing
-  z.object({
-    skip: z.literal(false),
-
-    data: z.object({
-      title: z.string(),
-
-      carpet_area: z.number().optional(),
-
-      city: z.enum(CITIES),
-
-      locality: z.string().min(1),
-
-      address: z.string(),
-
-      gender_preference: z.enum(GENDER_PREFERENCES),
-
-      bhk: z.enum(BHK_TYPES),
-
-      occupancy: z.enum(OCCUPANCY_TYPES),
-
-      total_occupancy: z.number().optional(),
-
-      furnished_status: z.enum(FURNISHED_STATUSES),
-
-      floor: z.number().optional(),
-
-      add_ons: z.array(
-        z.object({
-          type: z.enum(ADD_ON_TYPES),
-          desc: z.string().optional(),
-        }),
-      ),
-
-      amenities: z.array(
-        z.object({
-          type: z.enum(AMENITY_TYPES),
-          desc: z.string().optional(),
-        }),
-      ),
-
-      house_rules: z.array(
-        z.object({
-          type: z.enum(HOUSE_RULE_TYPES),
-          desc: z.string().optional(),
-        }),
-      ),
-
-      neighborhood: z.array(
-        z.object({
-          type: z.enum(NEIGHBORHOOD_TYPES),
-          distance: z.number(),
-        }),
-      ),
-
-      rent: z.number().positive(),
-
-      deposit: z.number().optional(),
-
-      brokerage: z.number().optional(),
-
-      setup_cost: z.number().optional(),
-
-      available_from: z.string().optional(),
-
-      available_immediately: z.boolean(),
-    }),
-
-    lister: z
-      .object({
-        name: z.string().optional(),
-
-        age: z.number().optional(),
-
-        profile_pic: z.string().optional(),
-
-        contact_number: z.string().optional(),
-
-        life_style: z.array(z.string()).optional(),
-      })
-      .optional(),
-  }),
-]);
+export type ListingDataFromGemeni = GeminiListingData;
 
 export type ValidGeminiListing = Extract<
-  z.infer<typeof GeminiListingResponseZodSchema>,
+  z.infer<typeof geminiListingResponseSchema>,
   { skip: false }
 >;
+
+/* -------------------------------------------------------------------------- */
+/* Final Listing                                                              */
+/* -------------------------------------------------------------------------- */
+
+export type Listing = {
+  images: string[];
+  cover_image?: string;
+  status: ListingStatus;
+
+  property: Property;
+  rental_scope: RentalScope;
+  pricing: Pricing;
+  availability: Availability;
+  preferences?: Preferences;
+
+  services: Service[];
+  add_ons: AddOn[];
+  amenities: Amenity[];
+  house_rules: HouseRule[];
+  nearby_places: NearbyPlace[];
+
+  views: number;
+  favorites: number;
+
+  external_listing?: ExternalListing;
+  lister_id?: string;
+
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export const listingSchema = z.object({
+  images: z.array(z.string()),
+  cover_image: z.string().optional(),
+
+  status: z.enum(LISTING_STATUSES),
+
+  property: propertySchema,
+  rental_scope: rentalScopeSchema,
+  pricing: pricingSchema,
+  availability: availabilitySchema,
+  preferences: preferencesSchema.optional(),
+
+  services: z.array(serviceSchema),
+  add_ons: z.array(addOnSchema),
+  amenities: z.array(amenitySchema),
+  house_rules: z.array(houseRuleSchema),
+  nearby_places: z.array(nearbyPlaceSchema),
+
+  views: z.number().min(0),
+  favorites: z.number().min(0),
+
+  external_listing: externalListingSchema.optional(),
+  lister_id: z.string().optional(),
+
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});

@@ -7,11 +7,17 @@ export const LISTING_STATUSES = [
 
 export const CITIES = ["mumbai", "pune", "bangalore", "hyderabad"] as const;
 
-export const GENDER_PREFERENCES = ["male", "female"] as const;
+export const GENDER_PREFERENCES = ["Male", "Female"] as const;
 
-export const BHK_TYPES = ["1RK", "1BHK", "2BHK", "3BHK"] as const;
+export const BHK_TYPES = ["1 RK", "1 BHK", "2 BHK", "3 BHK"] as const;
 
-export const OCCUPANCY_TYPES = ["single", "double", "triple"] as const;
+export const SERVICES_TYPES = [
+  "cook",
+  "maid",
+  "housekeeping",
+  "laundry",
+  "other",
+] as const;
 
 export const FURNISHED_STATUSES = [
   "unfurnished",
@@ -46,12 +52,6 @@ export const ADD_ON_TYPES = [
   "Private Terrace",
   "Walk-in Closet",
   "Furniture",
-
-  // Services
-  "Cook",
-  "Maid",
-  "Housekeeping",
-  "Laundry",
 
   "Others",
 ] as const;
@@ -124,7 +124,12 @@ export const HOUSE_RULE_TYPES = [
   "Others",
 ] as const;
 
-export const NEIGHBORHOOD_TYPES = ["Railway Station", "Metro"] as const;
+export const NEIGHBORHOOD_TYPES = [
+  "Railway Station",
+  "Metro",
+  "Bus Stop",
+  "Airport",
+] as const;
 
 export const LISTING_SOURCES = ["app", "facebook", "reddit"] as const;
 
@@ -132,10 +137,10 @@ export type ListingStatus = (typeof LISTING_STATUSES)[number];
 export type City = (typeof CITIES)[number];
 export type GenderPreference = (typeof GENDER_PREFERENCES)[number];
 export type BhkType = (typeof BHK_TYPES)[number];
-export type OccupancyType = (typeof OCCUPANCY_TYPES)[number];
 export type FurnishedStatus = (typeof FURNISHED_STATUSES)[number];
 export type AddOnType = (typeof ADD_ON_TYPES)[number];
 export type AmenityType = (typeof AMENITY_TYPES)[number];
 export type HouseRuleType = (typeof HOUSE_RULE_TYPES)[number];
 export type NeighborhoodType = (typeof NEIGHBORHOOD_TYPES)[number];
 export type ListingSource = (typeof LISTING_SOURCES)[number];
+export type ServiceType = (typeof SERVICES_TYPES)[number];

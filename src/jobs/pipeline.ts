@@ -25,7 +25,7 @@ import { Listing } from "@/types/listing";
 import { FacebookPost, RawPost, RedditPost } from "@/types/post";
 import { RedditListingChild } from "@/types/reddit";
 import { logger } from "@/utils/logger";
-import { toErrorMessage } from "@/utils";
+import { sleepRandom, toErrorMessage } from "@/utils/utils";
 
 const progressBarWidth = 30;
 
@@ -39,7 +39,9 @@ const main = async () => {
   //
   const { browser, context } = await createFacebookBrowser();
   try {
-    for (const groupId of scrapingConfig.facebook.groups) {
+    const groups = scrapingConfig.facebook.groups;
+    for (let i = 0; i < groups.length; i++) {
+      const groupId = groups[i];
       const result = await scrapeGroup(context, groupId);
 
       const filename = `facebook-${groupId}-${jobTimestamp}`;
@@ -51,6 +53,17 @@ const main = async () => {
       console.log(
         `Fetched ${result.length} posts for fb-${groupId}. Results saved at Norm: ${normOutputPath}\n`,
       );
+
+      // Random anti-ban cooldown between groups (skipped after the last).
+      if (i < groups.length - 1) {
+        const slept = await sleepRandom(
+          scrapingConfig.facebook.interGroupDelayMinMs,
+          scrapingConfig.facebook.interGroupDelayMaxMs,
+        );
+        console.log(
+          `Cooling down for ${(slept / 1000).toFixed(1)}s before next Facebook group (anti-ban)...\n`,
+        );
+      }
     }
 
     console.log("\nFacebook scraping complete.");
@@ -62,7 +75,9 @@ const main = async () => {
   //    Scraping Reddit
   //
   const redditClient = new RedditClient();
-  for (const subreddit of scrapingConfig.reddit.subreddits) {
+  const subreddits = scrapingConfig.reddit.subreddits;
+  for (let i = 0; i < subreddits.length; i++) {
+    const subreddit = subreddits[i];
     console.log(`Starting fetch for r/${subreddit}...`);
 
     const result = await scrapeSubreddit(redditClient, subreddit);
@@ -80,6 +95,17 @@ const main = async () => {
     console.log(
       `Fetched ${result.posts.length} posts for r/${subreddit}. Results saved at Raw: ${rawOutputPath} and Norm: ${normOutputPath}\n`,
     );
+
+    // Random anti-ban cooldown between subreddits (skipped after the last).
+    if (i < subreddits.length - 1) {
+      const slept = await sleepRandom(
+        scrapingConfig.reddit.interSubredditDelayMinMs,
+        scrapingConfig.reddit.interSubredditDelayMaxMs,
+      );
+      console.log(
+        `Cooling down for ${(slept / 1000).toFixed(1)}s before next subreddit (anti-ban)...\n`,
+      );
+    }
   }
 
   //
@@ -116,6 +142,7 @@ const main = async () => {
         llm_skiped: 0,
         success: 0,
         failed: 0,
+        no_url: 0,
       };
 
       const updateProgress = () => {
@@ -134,7 +161,8 @@ const main = async () => {
             `| Marked: ${subgroupStats.marked} ` +
             `| Success: ${subgroupStats.success} ` +
             `| Skipped: ${subgroupStats.llm_skiped} ` +
-            `| Failed: ${subgroupStats.failed}`,
+            `| Failed: ${subgroupStats.failed} ` +
+            `| NoURL: ${subgroupStats.no_url}`,
         );
       };
 
@@ -142,9 +170,19 @@ const main = async () => {
         subgroupStats.total++;
 
         //
+        // Post URL check (mainly for facebook posts which dont have a postUrl)
+        //
+        if (!post.postUrl) {
+          subgroupStats.no_url++;
+          logger.debug(`[${post.postId}] Skipped: missing postUrl`);
+          updateProgress();
+          continue;
+        }
+
+        //
         // Heuristics Check
         //
-        const listingType: ListingType = getListingType(post);
+        const listingType: ListingType = getListingType(post).type;
         if (listingType !== "offering_room") {
           logger.debug(`[${post.postId}] Skipped: ${listingType}`);
           updateProgress();
@@ -291,7 +329,8 @@ const main = async () => {
           `heuristic=${subgroupStats.heuristic_valid} ` +
           `skipped=${subgroupStats.llm_skiped} ` +
           `success=${subgroupStats.success} ` +
-          `failed=${subgroupStats.failed}`,
+          `failed=${subgroupStats.failed} ` +
+          `no_url=${subgroupStats.no_url}`,
       );
     }
 

@@ -3,7 +3,7 @@ import https from "https";
 import { config } from "@/config/scrapping";
 import { REDDIT_API_HOST, REDDIT_USER_AGENT } from "@/config/constants";
 import { logger } from "@/utils/logger";
-import { sleep } from "@/utils";
+import { sleep } from "@/utils/utils";
 
 import type { RedditHttpResponse } from "@/types/reddit";
 
