@@ -1,4 +1,8 @@
 import { config as scrapingConfig } from "@/config/scrapping";
+import {
+  getCityForFacebookGroup,
+  getCityForSubreddit,
+} from "@/config/constants";
 import { createFacebookBrowser } from "@/facebook/browser";
 import { scrapeGroup } from "@/facebook/scraper";
 import { getRedditDeletionReason } from "@/parsing/deletion";
@@ -168,6 +172,13 @@ const main = async () => {
 
       for (const post of posts) {
         subgroupStats.total++;
+
+        if (!post.city) {
+          post.city =
+            post.platform === "facebook"
+              ? getCityForFacebookGroup(subgroup)
+              : getCityForSubreddit(subgroup);
+        }
 
         //
         // Post URL check (mainly for facebook posts which dont have a postUrl)

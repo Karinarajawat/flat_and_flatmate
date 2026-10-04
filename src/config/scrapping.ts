@@ -17,12 +17,15 @@ import {
   REDDIT_RETRY_DELAY_MS,
   TARGET_FACEBOOK_GROUPS,
   TARGET_SUBREDDITS,
+  FACEBOOK_GROUP_CITY_MAP,
+  SUBREDDIT_CITY_MAP,
   NORM_DATA_DIR,
 } from "@/config/constants";
 
 export const config = {
   reddit: {
     subreddits: TARGET_SUBREDDITS,
+    cityMap: SUBREDDIT_CITY_MAP,
 
     fetchLimit: REDDIT_DEFAULT_FETCH_LIMIT,
     maxPostsPerSubreddit: REDDIT_DEFAULT_MAX_POSTS,
@@ -47,6 +50,7 @@ export const config = {
 
   facebook: {
     groups: TARGET_FACEBOOK_GROUPS,
+    cityMap: FACEBOOK_GROUP_CITY_MAP,
 
     pagesToScroll: FACEBOOK_DEFAULT_PAGES_TO_SCROLL,
 

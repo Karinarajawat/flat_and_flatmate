@@ -1,4 +1,5 @@
 import { logger } from "@/utils/logger";
+import { getCityForSubreddit } from "@/config/constants";
 
 import type { RedditPost } from "@/types/post";
 import type { RedditListingChild, RedditMediaMetadata } from "@/types/reddit";
@@ -114,6 +115,7 @@ export function mapRedditPost(child: RedditListingChild): RedditPost {
   const data = child.data;
 
   const imageUrls = extractImageUrls(data);
+  const city = getCityForSubreddit(data.subreddit);
 
   logger.debug(`Mapped post ${data.id}: ${imageUrls.length} images`);
 
@@ -133,5 +135,7 @@ export function mapRedditPost(child: RedditListingChild): RedditPost {
     ...(imageUrls.length > 0 ? { imageUrls } : {}),
 
     subreddit: data.subreddit,
+
+    ...(city ? { city } : {}),
   };
 }

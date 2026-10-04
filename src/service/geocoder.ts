@@ -89,24 +89,40 @@ export async function resolveCoordinates(listing: {
   city: string;
 }) {
   const attempts: string[] = [];
+  const address = listing.address?.trim();
+  const locality = listing.locality?.trim();
+  const city = listing.city?.trim();
 
-  if (listing.address) {
-    attempts.push(
-      `${listing.address}, ${listing.locality}, ${listing.city}, India`,
-    );
+  if (address && locality && address.toLowerCase() !== locality.toLowerCase()) {
+    attempts.push(`${address}, ${locality}, ${city}, India`);
+    attempts.push(`${address}, ${city}, India`);
+  } else if (address) {
+    attempts.push(`${address}, ${city}, India`);
   }
 
-  if (listing.locality) {
-    attempts.push(`${listing.locality}, ${listing.city}, India`);
+  if (locality) {
+    attempts.push(`${locality}, ${city}, India`);
   }
 
-  if (listing.city) {
-    attempts.push(`${listing.city}, India`);
+  if (city) {
+    attempts.push(`${city}, India`);
   }
 
-  logger.debug(`Geocode attempts: ${attempts.length}`);
+  // Deduplicate queries while preserving order
+  const uniqueAttempts: string[] = [];
+  const seen = new Set<string>();
 
   for (const query of attempts) {
+    const key = query.toLowerCase().trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueAttempts.push(query);
+    }
+  }
+
+  logger.debug(`Geocode attempts (${uniqueAttempts.length}): ${uniqueAttempts.join(" | ")}`);
+
+  for (const query of uniqueAttempts) {
     const coordinates = await geocode(query);
 
     if (coordinates) {

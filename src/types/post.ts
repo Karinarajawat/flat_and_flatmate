@@ -1,3 +1,5 @@
+import { City } from "@/config/model";
+
 export type Platform = "reddit" | "facebook";
 
 export interface RawPost {
@@ -13,6 +15,7 @@ export interface RawPost {
     body: string;
     created_utc: number;
   }>;
+  city?: City;
 }
 
 export interface RedditPost extends RawPost {

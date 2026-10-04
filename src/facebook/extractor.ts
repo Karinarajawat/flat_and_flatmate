@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import type { FacebookPost } from "@/types/post";
+import { getCityForFacebookGroup } from "@/config/constants";
 
 export const extractFacebookPosts = async (
   page: Page,
@@ -287,12 +288,18 @@ export const extractFacebookPosts = async (
     return extracted;
   }, groupId);
 
-  if (posts.length === 0) {
+  const city = getCityForFacebookGroup(groupId);
+  const enrichedPosts: FacebookPost[] = posts.map((post) => ({
+    ...post,
+    ...(city ? { city } : {}),
+  }));
+
+  if (enrichedPosts.length === 0) {
     console.warn(
       `extractFacebookPosts: no posts for group ${groupId} — ` +
         "selectors may be stale (fallback path was removed).",
     );
   }
 
-  return posts;
+  return enrichedPosts;
 };

@@ -3,9 +3,13 @@ import { RawPost } from "@/types/post";
 export function buildPrompt(post: RawPost): string {
   const today = new Date().toISOString().slice(0, 10);
 
+  const cityContext = post.city
+    ? `\nCOMMUNITY CITY CONTEXT: "${post.city}" (This post was scraped from a ${post.city} housing group/community).\n`
+    : "";
+
   return `Extract structured data from this Indian room/flat rental post.
 
-TODAY: ${today}
+TODAY: ${today}${cityContext}
 
 RULES:
 - Extract only stated or unambiguously implied facts. Never invent, infer, or hallucinate. Be deterministic: if a REQUIRED field (listed below) is missing, empty, vague, or a placeholder/fake value, set skip=true. Do not guess or fill it in.
@@ -15,8 +19,8 @@ RULES:
 - Allowed defaults (the ONLY ones — never skip for these): property.address defaults to the locality/society string when no fuller address is stated (see address rule); rental_scope.capacity defaults to 1 for a private room with no sharing words (see rental_scope rule); property.furnished_status defaults to "unfurnished" when unknown; rental_scope.total_occupancy may be omitted when unknown. Nothing else may be defaulted.
 - pricing.rent must be a realistic positive amount actually stated in the post as an explicit number. If rent is 0, 1, missing, "DM for rent", "Call for details", or clearly a placeholder, set skip=true. Do not use fake values such as rent=0 or rent=1. Never default or infer rent from deposit, budget, or similar listings.
 - property.bhk must be exactly one of "1 RK", "1 BHK", "2 BHK", "3 BHK" as stated or unambiguously implied (see normalization below). If unknown, set skip=true.
-- property.city must be a supported city. If missing or unknown, set skip=true.
-- property.locality must be a specific, geocodable area name (not just a city name). If missing, empty, or too vague, set skip=true.
+- property.city must be a supported city. If explicitly stated in the post, extract that city. If city is not stated in the post but a COMMUNITY CITY CONTEXT is provided above, use that community city. If city is unknown and no community city context is provided, set skip=true.
+- property.locality must be a specific area/neighborhood name or society name. If only a society/apartment name is stated in the post and no broader locality is mentioned, emit that society name as locality. If missing, empty, or too vague, set skip=true.
 - property.address: emit the fullest address/location string stated in the post (flat/society name, street, landmark). A society name, locality, or landmark string is sufficient — either locality or society is required, any one of them works. Never invent house/flat numbers. When only locality/society is known, emit that string as the address (the pipeline appends ", locality, city" for geocoding). Omit only if neither locality nor any society/landmark is stated — but then locality itself would be missing and skip=true already applies.
 - rental_scope.type must be "room" (private room offered) or "hall" (hall/drawing-room sharing offered). If neither can be resolved, set skip=true. rental_scope.capacity: emit stated sharing (single/one person=1, double/two sharing=2, triple/three sharing=3). A private room with no sharing words implies single occupancy — emit capacity 1 rather than skipping. Only hall-sharing with unknown occupancy may be omitted (then the pipeline defaults it to 1).
 - availability.available_immediately is a required boolean, always emit it. Future availability -> availability.available_from ISO date + availability.available_immediately=false. Now/immediately OR no date -> availability.available_immediately=true.

@@ -88,6 +88,14 @@ export const parsePost = async (
 
     const { data } = geminiResponse;
 
+    // Fallback to post.city from config if not populated by Gemini
+    if (!data.property?.city && post.city) {
+      data.property.city = post.city;
+      logger.debug(
+        `[${post.postId}] City defaulted from community context: ${post.city}`,
+      );
+    }
+
     // Deterministic guard: prompt requires skip=true when any REQUIRED
     // field is missing/placeholder, but the LLM is non-binding. Enforce
     // here so incomplete or whole-flat listings never reach geocode/DB.
